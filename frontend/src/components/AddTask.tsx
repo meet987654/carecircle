@@ -29,9 +29,11 @@ export function AddTask({ today, timeZone, recipientName, onCreate }: Props) {
 
   if (!open) {
     return (
-      <button className="btn add-btn" onClick={() => setOpen(true)}>
+      <button className="add" onClick={() => setOpen(true)}>
+        <span className="add__plus" aria-hidden>
+          +
+        </span>
         Add a task
-        <span className="plus" aria-hidden>+</span>
       </button>
     );
   }
@@ -54,13 +56,13 @@ export function AddTask({ today, timeZone, recipientName, onCreate }: Props) {
   }
 
   return (
-    <form className="panel" onSubmit={submit}>
-      <span className="label">New task</span>
-      <h2 className="panel__title display">What needs doing?</h2>
-      <p className="panel__sub">It will show up for everyone in the family.</p>
+    <form className="sheet" onSubmit={submit} aria-labelledby="new-task-title">
+      <h2 id="new-task-title" className="sheet__title">
+        New task
+      </h2>
 
       <label className="field">
-        <span className="label">Task</span>
+        <span className="field__label">What needs doing?</span>
         <input
           className="input"
           value={title}
@@ -73,16 +75,10 @@ export function AddTask({ today, timeZone, recipientName, onCreate }: Props) {
       </label>
 
       <fieldset className="field">
-        <legend className="label">Type</legend>
-        <div className="options">
+        <legend className="field__label">Type</legend>
+        <div className="segmented">
           {CATEGORIES.map((c) => (
-            <button
-              type="button"
-              key={c}
-              className={`option cat-${c}`}
-              aria-pressed={category === c}
-              onClick={() => setCategory(c)}
-            >
+            <button type="button" key={c} aria-pressed={category === c} onClick={() => setCategory(c)}>
               {CATEGORY_LABEL[c]}
             </button>
           ))}
@@ -90,13 +86,15 @@ export function AddTask({ today, timeZone, recipientName, onCreate }: Props) {
       </fieldset>
 
       <fieldset className="field">
-        <legend className="label">Time · {recipientName}'s clock</legend>
-        <div className="options">
+        <legend className="field__label">
+          Time <span className="field__hint">· {recipientName}'s local time</span>
+        </legend>
+        <div className="chips">
           {QUICK_TIMES.map((t) => (
             <button
               type="button"
               key={t.value}
-              className="option option--time"
+              className="chip"
               aria-pressed={time === t.value}
               onClick={() => setTime(t.value)}
             >
@@ -114,8 +112,8 @@ export function AddTask({ today, timeZone, recipientName, onCreate }: Props) {
         </div>
       </fieldset>
 
-      <label className="toggle">
-        <span>
+      <label className="switch">
+        <span className="switch__text">
           <strong>Repeat every day</strong>
           <small>For daily medicines and calls</small>
         </span>
@@ -124,8 +122,8 @@ export function AddTask({ today, timeZone, recipientName, onCreate }: Props) {
 
       {error && <p className="error">{error}</p>}
 
-      <div className="form-actions">
-        <button type="button" className="btn btn--quiet" onClick={() => setOpen(false)}>
+      <div className="actions">
+        <button type="button" className="btn btn--secondary" onClick={() => setOpen(false)}>
           Cancel
         </button>
         <button className="btn btn--primary" disabled={saving || !title.trim()}>

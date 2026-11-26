@@ -226,138 +226,136 @@ export function AskBox({ recipientName }: Props) {
   }
 
   const voiceOn = voice !== "off";
+  const voiceBusy = voice === "transcribing" || voice === "thinking" || voice === "speaking" || voice === "starting";
 
   return (
-    <section className="panel" aria-labelledby="ask-title">
-      <span className="label">Assistant</span>
-      <h2 id="ask-title" className="panel__title display">
-        Ask about today
-      </h2>
-      <p className="panel__sub">Type or talk. Answers come only from today's list, never from guesswork.</p>
-
-      {voiceOn ? (
-        <div className={`voice voice--${voice}`} role="status" aria-live="polite">
-          <span className="label">Voice · {recipientName}'s day</span>
-          <p className="voice__status">{VOICE_STATUS[voice]}</p>
-          <div className="voice__meter" aria-hidden>
-            <span
-              style={{ transform: `scaleX(${voice === "listening" || voice === "hearing" ? Math.max(0.02, level) : 0})` }}
-            />
-          </div>
-          <div className="voice__actions">
-            {voice === "hearing" && (
-              <button type="button" className="btn btn--primary" onClick={() => finishTalkingRef.current?.abort()}>
-                Done talking
-              </button>
-            )}
-            {voice === "speaking" && (
-              <button type="button" className="btn btn--primary" onClick={interrupt}>
-                Skip
-              </button>
-            )}
-            <button type="button" className="btn btn--quiet" onClick={endVoice}>
-              End
-            </button>
-          </div>
-          <p className="voice__hint">
-            {voice === "speaking"
-              ? "After the answer, ask a follow-up. Just keep talking."
-              : "Ask anything about today. I'll stop listening when you pause."}
-          </p>
-        </div>
-      ) : (
-        <form
-          className="ask__bar"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void submit(question);
-          }}
-        >
-          <input
-            className="input"
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder={state === "idle" ? `e.g. Did ${recipientName} take the 8 pm tablet?` : "Ask a follow-up…"}
-            aria-label="Your question"
-            enterKeyHint="send"
-          />
-          {voiceSupported && (
-            <button
-              type="button"
-              className="btn btn--quiet"
-              onClick={() => void startVoice()}
-              disabled={state === "streaming"}
-            >
-              Talk
-            </button>
-          )}
-          <button className="btn btn--primary" disabled={state === "streaming" || !question.trim()}>
-            Ask
+    <section className="section" aria-labelledby="ask-title">
+      <div className="section__head">
+        <h2 id="ask-title" className="section__title">
+          Ask about today
+        </h2>
+        {voiceSupported && !voiceOn && (
+          <button type="button" className="talk" onClick={() => void startVoice()} disabled={state === "streaming"}>
+            Talk instead
           </button>
-        </form>
-      )}
-      {voiceNote && <p className="error voice__note">{voiceNote}</p>}
+        )}
+      </div>
 
-      {state === "idle" ? (
-        <div className="prompts">
-          {suggestions.map((s) => (
-            <button key={s} type="button" className="prompt" onClick={() => void submit(s)}>
-              {s}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <>
-          {turns.length > 0 && (
-            <ol className="thread" aria-label="Earlier in this conversation">
-              {turns.map((t, i) => (
-                <li key={i} className="thread__turn">
-                  <p className="answer__q">“{t.question}”</p>
-                  <p className="thread__a">{t.answer}</p>
-                </li>
-              ))}
-            </ol>
-          )}
-          <figure className={`answer answer--${state}`}>
-            <blockquote className="answer__q">“{asked}”</blockquote>
-            <p className="answer__text" aria-live={voiceOn ? "off" : "polite"} aria-busy={state === "streaming"}>
-              {answer ? (
-                <>
-                  {answer}
-                  {state === "streaming" && <span className="caret" aria-hidden />}
-                </>
-              ) : (
-                <span className="thinking">Reading today's list</span>
-              )}
+      <div className="ask">
+        {voiceOn ? (
+          <div className={`voice ${voiceBusy ? "voice--busy" : ""}`} role="status" aria-live="polite">
+            <p className="voice__status">{VOICE_STATUS[voice]}</p>
+            <div className="voice__meter" aria-hidden>
+              <span
+                style={{ transform: `scaleX(${voice === "listening" || voice === "hearing" ? Math.max(0.02, level) : 0})` }}
+              />
+            </div>
+            <p className="voice__hint">
+              {voice === "speaking"
+                ? "When it finishes, just ask a follow-up."
+                : "Ask anything about today. It stops listening when you pause."}
             </p>
-            {state === "done" && (
-              <figcaption className="answer__foot">
-                <span className="label num">{latency != null && `Answered in ${(latency / 1000).toFixed(1)} s`}</span>
-                <span className="rate">
-                  {feedback == null ? (
-                    <>
-                      Helpful?
-                      <button className="btn btn--text" onClick={() => void rate(true)}>
-                        Yes
-                      </button>
-                      <button className="btn btn--text" onClick={() => void rate(false)}>
-                        No
-                      </button>
-                    </>
-                  ) : (
-                    "Thanks for the feedback"
-                  )}
-                </span>
-              </figcaption>
-            )}
-          </figure>
-          {state !== "streaming" && !voiceOn && (
-            <button type="button" className="btn btn--text start-over" onClick={startOver}>
-              Start over
+            <div className="voice__actions">
+              {voice === "hearing" && (
+                <button type="button" className="btn btn--primary" onClick={() => finishTalkingRef.current?.abort()}>
+                  Done talking
+                </button>
+              )}
+              {voice === "speaking" && (
+                <button type="button" className="btn btn--primary" onClick={interrupt}>
+                  Skip
+                </button>
+              )}
+              <button type="button" className="btn btn--secondary" onClick={endVoice}>
+                End
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form
+            className="ask__form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submit(question);
+            }}
+          >
+            <input
+              className="input"
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder={state === "idle" ? `e.g. Did ${recipientName} take the 8 pm tablet?` : "Ask a follow-up…"}
+              aria-label="Your question"
+              enterKeyHint="send"
+            />
+            <button className="btn btn--primary" disabled={state === "streaming" || !question.trim()}>
+              Ask
             </button>
-          )}
-        </>
-      )}
+          </form>
+        )}
+        {voiceNote && <p className="error voice__note">{voiceNote}</p>}
+
+        {state === "idle" ? (
+          <>
+            <div className="chips" aria-label="Suggested questions">
+              {suggestions.map((s) => (
+                <button key={s} type="button" className="chip" onClick={() => void submit(s)}>
+                  {s}
+                </button>
+              ))}
+            </div>
+            <p className="ask__note">Answers come only from today's list.</p>
+          </>
+        ) : (
+          <>
+            {turns.map((t, i) => (
+              <div key={i} className="qa qa--past">
+                <p className="qa__q">{t.question}</p>
+                <p className="qa__a">{t.answer}</p>
+              </div>
+            ))}
+            <figure className={`qa qa--${state}`}>
+              <blockquote className="qa__q">{asked}</blockquote>
+              <p className="qa__a" aria-live={voiceOn ? "off" : "polite"} aria-busy={state === "streaming"}>
+                {answer ? (
+                  <>
+                    {answer}
+                    {state === "streaming" && <span className="caret" aria-hidden />}
+                  </>
+                ) : (
+                  <span className="thinking">Checking today's list…</span>
+                )}
+              </p>
+              {state === "done" && (
+                <figcaption className="qa__foot">
+                  <span className="tnum">{latency != null && `${(latency / 1000).toFixed(1)} s`}</span>
+                  <span className="qa__rate">
+                    {feedback == null ? (
+                      <>
+                        Helpful?
+                        <button className="link" onClick={() => void rate(true)}>
+                          Yes
+                        </button>
+                        <button className="link" onClick={() => void rate(false)}>
+                          No
+                        </button>
+                      </>
+                    ) : (
+                      "Thanks for the feedback"
+                    )}
+                  </span>
+                </figcaption>
+              )}
+            </figure>
+            {state !== "streaming" && !voiceOn && (
+              <div className="qa__end">
+                <button type="button" className="link link--muted" onClick={startOver}>
+                  Clear conversation
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </section>
   );
 }

@@ -32,17 +32,14 @@ export function Login({ onLogin }: Props) {
   }
 
   return (
-    <main className="picker">
-      <span className="wordmark">
-        Care<b>Circle</b>
-      </span>
-      <span className="label">Welcome back</span>
-      <h1 className="display">Sign in</h1>
-      <p>So the family can see who looked after whom, and when.</p>
+    <main className="auth">
+      <span className="brand">CareCircle</span>
+      <h1 className="auth__title">Sign in</h1>
+      <p className="auth__lede">One shared list for looking after a parent, so the whole family knows what's done.</p>
 
-      <form className="login" onSubmit={(e) => void signIn(e)}>
+      <form className="auth__form" onSubmit={(e) => void signIn(e)}>
         <label className="field">
-          <span className="label">Email</span>
+          <span className="field__label">Email</span>
           <input
             className="input"
             type="email"
@@ -54,7 +51,7 @@ export function Login({ onLogin }: Props) {
           />
         </label>
         <label className="field">
-          <span className="label">Password</span>
+          <span className="field__label">Password</span>
           <input
             className="input"
             type="password"
@@ -69,23 +66,23 @@ export function Login({ onLogin }: Props) {
             {error}
           </p>
         )}
-        <button className="btn btn--primary login__submit" disabled={busy}>
+        <button className="btn btn--primary btn--block" disabled={busy}>
           {busy ? "Signing in…" : "Sign in"}
         </button>
       </form>
 
-      <section className="demo" aria-labelledby="demo-title">
-        <span id="demo-title" className="label">
+      <section className="auth__demo" aria-labelledby="demo-title">
+        <h2 id="demo-title" className="section__title">
           Demo accounts
-        </span>
-        <div className="picker__list">
+        </h2>
+        <div className="group">
           {DEMO_ACCOUNTS.map((name) => {
             const demoEmail = `${name.toLowerCase()}@carecircle.demo`;
             return (
               <button
                 key={name}
                 type="button"
-                className="member"
+                className="account-row"
                 disabled={busy}
                 onClick={() => {
                   setEmail(demoEmail);
@@ -93,19 +90,20 @@ export function Login({ onLogin }: Props) {
                   void signIn(undefined, { email: demoEmail, password: DEMO_PASSWORD });
                 }}
               >
-                <span className="initial" aria-hidden>
+                <span className="avatar avatar--lg" aria-hidden>
                   {name[0]}
                 </span>
                 <span>
-                  <span className="member__name">{name}</span>
-                  <span className="member__rel">{demoEmail}</span>
+                  <span className="account-row__name">{name}</span>
+                  <span className="account-row__email">{demoEmail}</span>
                 </span>
+                <span className="account-row__go">Sign in</span>
               </button>
             );
           })}
         </div>
-        <p className="picker__foot">
-          Tap a name to sign in, or use its email with the password <strong>{DEMO_PASSWORD}</strong>.
+        <p className="auth__foot">
+          Tap an account, or use its email with the password <strong>{DEMO_PASSWORD}</strong>.
         </p>
       </section>
     </main>

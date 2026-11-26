@@ -15,11 +15,6 @@ interface Toast {
   undo?: () => void;
 }
 
-function greeting(timeZone: string): string {
-  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", hour12: false }).format(new Date()));
-  return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-}
-
 export default function App() {
   const [recipient, setRecipient] = useState<Recipient | null>(null);
   const [today, setToday] = useState<Today | null>(null);
@@ -153,9 +148,7 @@ export default function App() {
   if (!member || !recipient || !today) {
     return (
       <main className="loading">
-        <span className="wordmark">
-          Care<b>Circle</b>
-        </span>
+        <span className="brand">CareCircle</span>
         <p>{offline ? "Can't reach the server. Is it running?" : "Loading today…"}</p>
       </main>
     );
@@ -167,30 +160,29 @@ export default function App() {
   const next = today.due[0];
 
   const sections = {
-    overdue: { title: "Needs attention", tasks: today.overdue, empty: "" },
-    due: { title: "Coming up", tasks: today.due, empty: "Nothing else due today." },
-    done: { title: "Done today", tasks: today.done, empty: "Nothing marked done yet." },
+    overdue: { title: "Overdue", tasks: today.overdue, empty: "" },
+    due: { title: "Up next", tasks: today.due, empty: "Nothing else is due today." },
+    done: { title: "Done", tasks: today.done, empty: "Nothing has been marked done yet." },
   } as const;
 
   const renderSection = (key: keyof typeof sections) => {
     const s = sections[key];
     return (
-      <section key={key} id={key} className={`section section--${key}`}>
+      <section key={key} id={key} className={`section section--${key}`} aria-labelledby={`${key}-title`}>
         <div className="section__head">
-          <h2 className="section__title display">
+          <h2 id={`${key}-title`} className="section__title">
             {s.title}
-            <span className="count num">{s.tasks.length}</span>
+            <span className="count">{s.tasks.length}</span>
           </h2>
-          {s.tasks.length > 1 && <span className="label">{key === "done" ? "Latest first" : "Soonest first"}</span>}
         </div>
         {s.tasks.length === 0 ? (
           key === "due" && allDone ? (
-            <p className="empty empty--celebrate">All done for today. Lovely work.</p>
+            <p className="empty empty--done">Everything is done for today.</p>
           ) : (
             <p className="empty">{s.empty}</p>
           )
         ) : (
-          <ul className="list">
+          <ul className="group">
             {s.tasks.map((t) => (
               <TaskCard
                 key={t.id}
@@ -212,69 +204,63 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="masthead">
-        <span className="wordmark">
-          Care<b>Circle</b>
-        </span>
-        <button className="me" onClick={() => void signOut()} aria-label={`Signed in as ${member.name}. Sign out`}>
-          <span className="initial" aria-hidden>{member.name[0]}</span>
-          {member.name} <small>· sign out</small>
+      <header className="topbar">
+        <span className="brand">CareCircle</span>
+        <button className="account" onClick={() => void signOut()} aria-label={`Signed in as ${member.name}. Sign out`}>
+          <span className="avatar" aria-hidden>
+            {member.name[0]}
+          </span>
+          {member.name}
+          <span className="account__action">· Sign out</span>
         </button>
       </header>
 
-      <section className="day" aria-label="Summary">
-        <span className="label">{fmtDay(today.date)}</span>
-        <h1 className="day__title display">{recipient.display_name}'s day</h1>
-        <p className="day__lede">
-          {greeting(tz)}, {member.name}.{" "}
+      <section className="hero" aria-label="Summary">
+        <p className="hero__date">{fmtDay(today.date)}</p>
+        <h1 className="hero__title">{recipient.display_name}'s day</h1>
+        <p className="hero__summary">
           {total === 0 ? (
             "Nothing is planned for today."
-          ) : allDone ? (
-            <strong>Everything is done.</strong>
           ) : (
             <>
-              <strong className="num">
+              <strong className="tnum">
                 {today.done.length} of {total}
               </strong>{" "}
               done
               {today.overdue.length > 0 && (
                 <>
-                  , <strong className="is-late num">{today.overdue.length} need attention</strong>
+                  {" · "}
+                  <span className="late tnum">{today.overdue.length} overdue</span>
                 </>
               )}
-              .{next && <> Next: {next.title.split(" - ")[0]} at {fmtTime(next.due_at, tz)}.</>}
+              {next && (
+                <span className="hero__next">
+                  Next: {next.title.split(" - ")[0]} at <span className="tnum">{fmtTime(next.due_at, tz)}</span>
+                </span>
+              )}
             </>
           )}
         </p>
-
-        <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={today.done.length} aria-label="Done today">
+        <div
+          className="progress"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={total}
+          aria-valuenow={today.done.length}
+          aria-label="Done today"
+        >
           <span style={{ width: `${total ? (today.done.length / total) * 100 : 0}%` }} />
         </div>
-
-        <nav className="tally" aria-label="Jump to section">
-          <a href="#overdue" className={today.overdue.length ? "is-late" : "is-zero"}>
-            <strong>{today.overdue.length}</strong>
-            <span className="label">Overdue</span>
-          </a>
-          <a href="#due" className={today.due.length ? "" : "is-zero"}>
-            <strong>{today.due.length}</strong>
-            <span className="label">To do</span>
-          </a>
-          <a href="#done" className={today.done.length ? "" : "is-zero"}>
-            <strong>{today.done.length}</strong>
-            <span className="label">Done</span>
-          </a>
-        </nav>
       </section>
 
       {offline && (
         <div className="banner" role="status">
-          Offline. Showing the list from {lastSync ? fmtTime(new Date(lastSync).toISOString(), tz) : "earlier"}.
+          You're offline. Showing the list from {lastSync ? fmtTime(new Date(lastSync).toISOString(), tz) : "earlier"}.
         </div>
       )}
 
       <main>
-        {/* Order = what a tired caregiver needs first: what's late, what's next, then the rest. */}
+        {/* What a caregiver needs first: what's late, what's next, then the rest. */}
         {today.overdue.length > 0 && renderSection("overdue")}
         {renderSection("due")}
         <AddTask today={today.date} timeZone={tz} recipientName={recipient.display_name} onCreate={createTask} />
@@ -286,7 +272,7 @@ export default function App() {
         <div className={`toast toast--${toast.tone}`} role="status" aria-live="polite">
           <span className="toast__text">{toast.text}</span>
           {toast.undo && (
-            <button className="btn" onClick={toast.undo}>
+            <button className="link" onClick={toast.undo}>
               Undo
             </button>
           )}
