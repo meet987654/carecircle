@@ -121,6 +121,10 @@ class AIInteraction(Base):
     answer: Mapped[str] = mapped_column(Text, default="")
     provider: Mapped[str] = mapped_column(String(50))
     model: Mapped[str | None] = mapped_column(String(100))
+    # "text" (typed) or "voice" (spoken; question is the transcript).
+    channel: Mapped[str] = mapped_column(String(10), default="text", server_default="text")
+    # Speech-to-text time for voice questions, so the whole voice round trip can be measured.
+    stt_ms: Mapped[int | None] = mapped_column(Integer)
     # streaming | ok | fallback | error | client_disconnected
     status: Mapped[str] = mapped_column(String(30), default="streaming")
     error: Mapped[str | None] = mapped_column(Text)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -97,11 +98,30 @@ class AskRequest(BaseModel):
     # Earlier turns, oldest first, so follow-ups like "did she take it?" make sense.
     # The client keeps the conversation; the server stays stateless.
     history: list[Turn] = Field(default_factory=list, max_length=6)
+    channel: Literal["text", "voice"] = "text"
+    # For voice: how long speech-to-text took (reported by the client, which called it).
+    stt_ms: int | None = Field(default=None, ge=0, le=120_000)
+
+
+class VoiceConfigOut(BaseModel):
+    stt: Literal["server", "browser"]
+    tts: Literal["server", "browser"]
+
+
+class TranscriptOut(BaseModel):
+    text: str
+    ms: int
+
+
+class SpeakRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=600)
 
 
 class InteractionOut(ORM):
     id: int
     member_id: int | None
+    channel: str
+    stt_ms: int | None
     question: str
     context: dict
     prompt: str | None

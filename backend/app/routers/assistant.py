@@ -62,6 +62,8 @@ def ask(
     interaction = AIInteraction(
         recipient_id=recipient.id,
         member_id=member.id,
+        channel=body.channel,
+        stt_ms=body.stt_ms,
         question=question,
         # Logged with the conversation so a follow-up's answer can be understood later.
         context={**context, "conversation": history} if history else context,

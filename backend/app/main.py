@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.db import Base, SessionLocal, engine
-from app.routers import assistant, auth, tasks
+from app.routers import assistant, auth, tasks, voice
 from app.seed import seed
 
 logging.basicConfig(level=logging.INFO)
@@ -34,6 +34,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(tasks.router)
 app.include_router(assistant.router)
+app.include_router(voice.router)
 
 
 @app.get("/api/health")

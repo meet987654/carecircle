@@ -145,3 +145,43 @@ def test_follow_up_question_uses_the_conversation_and_is_logged(client):
     assert "BP tablet" in answer and "Physio" not in answer
     log = client.get("/api/assistant/interactions").json()[0]
     assert log["context"]["conversation"] == history
+
+
+def test_voice_transcribe_and_spoken_question_is_logged(client, monkeypatch):
+    from app.routers import voice as router
+    from app.services import voice
+
+    make_task(client, "Amlodipine 5 mg", NOW() - timedelta(hours=1))
+    seen = {}
+
+    async def fake_transcribe(settings, audio, content_type, hint):
+        seen.update(audio=audio, content_type=content_type, hint=hint)
+        return "Did she take the Amlodipine?", 210
+
+    monkeypatch.setattr(voice, "transcribe", fake_transcribe)
+    monkeypatch.setattr(router, "get_settings", lambda: Settings(llm_api_key="k"))
+
+    assert client.get("/api/voice/config").json()["stt"] == "server"
+    r = client.post("/api/voice/transcribe", content=b"\x1aE\xdf\xa3fake-webm",
+                    headers={"Content-Type": "audio/webm;codecs=opus"})
+    assert r.json() == {"text": "Did she take the Amlodipine?", "ms": 210}
+    assert seen["content_type"] == "audio/webm"
+    assert "Amlodipine 5 mg" in seen["hint"] and "Ravi" in seen["hint"]  # spelling hints
+
+    assert client.post("/api/voice/transcribe", content=b"x", headers={"Content-Type": "text/plain"}).status_code == 415
+    assert client.post("/api/voice/transcribe", content=b"", headers={"Content-Type": "audio/webm"}).status_code == 422
+
+    with client.stream("POST", "/api/assistant/ask",
+                       json={"question": r.json()["text"], "channel": "voice", "stt_ms": 210}) as s:
+        s.read()
+    log = client.get("/api/assistant/interactions").json()[0]
+    assert log["channel"] == "voice" and log["stt_ms"] == 210 and "Amlodipine" in log["answer"]
+
+
+def test_voice_without_a_key_tells_the_browser_to_use_its_own(client, monkeypatch):
+    from app.routers import voice as router
+
+    monkeypatch.setattr(router, "get_settings", lambda: Settings(llm_api_key=""))
+    assert client.get("/api/voice/config").json() == {"stt": "browser", "tts": "browser"}
+    r = client.post("/api/voice/transcribe", content=b"abc", headers={"Content-Type": "audio/webm"})
+    assert r.status_code == 503

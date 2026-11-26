@@ -20,6 +20,14 @@ class Settings(BaseSettings):
     llm_model: str = "qwen/qwen3.8-27b"
     llm_timeout_seconds: float = 20.0
 
+    # Voice agent. Speech-to-text runs on the same OpenAI-compatible endpoint/key
+    # (Groq Whisper); without a key the browser's own recognition is used.
+    stt_model: str = "whisper-large-v3-turbo"
+    # Server voice is optional: empty means the browser speaks the answer.
+    # Groq's Orpheus voice needs its terms accepted once in the Groq console.
+    tts_model: str = ""
+    tts_voice: str = "hannah"
+
     # Signs session tokens. Set a long random value in any real deployment.
     auth_secret: str = "dev-only-change-me"
     session_days: int = 30
