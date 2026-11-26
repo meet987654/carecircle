@@ -130,7 +130,7 @@ old the list is.
   schedules, grounded assistant) are mine to defend and change.
 
 ## Time spent
-About 2 hours.
+About 3–4 hours.
 
 ## Layout
 ```
