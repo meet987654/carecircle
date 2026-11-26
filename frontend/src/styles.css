@@ -322,6 +322,28 @@ h1, h2, h3, p, figure, blockquote { margin: 0; }
 .ask__bar .btn { flex: 1 1 0; }
 .btn--live { background: var(--late); color: #fff; border-color: var(--late); }
 
+/* Voice agent: an inverted ink card, so it's obvious the phone is listening or talking. */
+.voice {
+  display: grid; gap: var(--s-3); padding: var(--s-5); border-radius: 16px;
+  background: var(--ink); color: var(--paper); animation: rise 0.3s var(--ease) both;
+}
+.voice .label { color: color-mix(in srgb, var(--paper) 65%, transparent); }
+.voice__status { font-family: var(--font-display); font-style: italic; font-size: var(--fs-xl); line-height: var(--lh-tight); letter-spacing: var(--tracking-display); min-height: 1.2em; }
+.voice--thinking .voice__status::after, .voice--transcribing .voice__status::after, .voice--starting .voice__status::after { content: ""; }
+.voice__meter { height: 4px; border-radius: 2px; overflow: hidden; background: color-mix(in srgb, var(--paper) 18%, transparent); }
+.voice__meter span { display: block; height: 100%; background: var(--paper); transform-origin: left; transition: transform 80ms linear; }
+.voice--thinking .voice__meter span, .voice--transcribing .voice__meter span, .voice--speaking .voice__meter span {
+  transform: none !important; width: 30%; animation: sweep 1.2s var(--ease) infinite;
+}
+@keyframes sweep { from { margin-left: -30%; } to { margin-left: 100%; } }
+.voice__actions { display: flex; gap: var(--s-2); }
+.voice__actions .btn { flex: 1 1 0; }
+.voice .btn--primary { background: var(--paper); color: var(--ink); }
+.voice .btn--quiet { color: var(--paper); border-color: color-mix(in srgb, var(--paper) 35%, transparent); }
+.voice__hint { font-size: var(--fs-sm); color: color-mix(in srgb, var(--paper) 70%, transparent); }
+.voice__note { margin: var(--s-3) 0 0; }
+@media (prefers-reduced-motion: reduce) { .voice__meter span { animation: none !important; } }
+
 .prompts { margin-top: var(--s-3); display: grid; }
 .prompt {
   text-align: left; background: none; border: 0; border-top: 1px solid var(--rule); min-height: 52px; padding: 0 2px;

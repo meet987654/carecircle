@@ -1,28 +1,42 @@
 import { useEffect, useRef, useState } from "react";
 import { api, ask, type Turn } from "../api";
+import {
+  Speaker,
+  canRecord,
+  canRecognizeInBrowser,
+  isPhantom,
+  recognizeInBrowser,
+  recordUtterance,
+  voiceSupported,
+  type VoiceConfig,
+} from "../voice";
 
 interface Props {
   recipientName: string;
 }
 
-// Minimal typing for the Web Speech API (not in TS's DOM lib).
-type SpeechRecognitionLike = {
-  lang: string;
-  interimResults: boolean;
-  onresult: (e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void;
-  onend: () => void;
-  onerror: () => void;
-  start: () => void;
-  stop: () => void;
-};
-const SpeechRecognitionImpl: (new () => SpeechRecognitionLike) | undefined =
-  (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
-
 type State = "idle" | "streaming" | "done" | "error";
+type VoiceState = "off" | "starting" | "listening" | "hearing" | "transcribing" | "thinking" | "speaking";
 
 // How many earlier turns to send. Enough for follow-ups, small enough to keep prompts short.
 const MAX_HISTORY = 6;
 
+const VOICE_STATUS: Record<Exclude<VoiceState, "off">, string> = {
+  starting: "Getting the microphone…",
+  listening: "Listening…",
+  hearing: "Go on, I'm listening…",
+  transcribing: "Got it…",
+  thinking: "Checking today's list…",
+  speaking: "Speaking…",
+};
+
+interface SubmitOptions {
+  channel?: "text" | "voice";
+  sttMs?: number;
+  onToken?: (text: string) => void;
+}
+
+/** "Ask about today": one conversation you can type or talk to. */
 export function AskBox({ recipientName }: Props) {
   const [question, setQuestion] = useState("");
   const [asked, setAsked] = useState("");
@@ -31,28 +45,46 @@ export function AskBox({ recipientName }: Props) {
   const [latency, setLatency] = useState<number | null>(null);
   const [interactionId, setInteractionId] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<boolean | null>(null);
-  const [listening, setListening] = useState(false);
-  // Finished turns of this conversation, oldest first (the current one is not in here yet).
+  // Finished turns of this conversation, oldest first (the one on screen is not in here yet).
   const [turns, setTurns] = useState<Turn[]>([]);
-  const answerRef = useRef("");
-  const abortRef = useRef<AbortController | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
-  useEffect(() => () => abortRef.current?.abort(), []);
+  const [voice, setVoice] = useState<VoiceState>("off");
+  const [level, setLevel] = useState(0);
+  const [voiceNote, setVoiceNote] = useState<string | null>(null);
+
+  // The voice loop runs across many renders, so it reads the conversation from refs.
+  const convo = useRef({ turns: [] as Turn[], asked: "", answer: "", state: "idle" as State });
+  const abortRef = useRef<AbortController | null>(null);
+  const voiceRef = useRef<AbortController | null>(null);
+  const finishTalkingRef = useRef<AbortController | null>(null);
+  const speakerRef = useRef<Speaker | null>(null);
+  const configRef = useRef<VoiceConfig | null>(null);
+
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      voiceRef.current?.abort();
+      speakerRef.current?.stop();
+    },
+    [],
+  );
 
   const suggestions = ["What's still pending?", `Has ${recipientName} had the medicines?`, "Who did what today?"];
 
-  async function submit(q: string) {
+  /** Ask one question (typed or spoken). Resolves with the answer, or null if it failed. */
+  async function submit(q: string, opts: SubmitOptions = {}): Promise<string | null> {
     const text = q.trim();
-    if (!text || state === "streaming") return;
+    const c = convo.current;
+    if (!text || c.state === "streaming") return null;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+
     // The answer on screen becomes part of the history this question is asked with.
     const history =
-      state === "done" && asked ? [...turns, { question: asked, answer: answerRef.current }].slice(-MAX_HISTORY) : turns;
+      c.state === "done" && c.asked ? [...c.turns, { question: c.asked, answer: c.answer }].slice(-MAX_HISTORY) : c.turns;
+    convo.current = { turns: history, asked: text, answer: "", state: "streaming" };
     setTurns(history);
-    answerRef.current = "";
     setAsked(text);
     setQuestion("");
     setAnswer("");
@@ -60,6 +92,11 @@ export function AskBox({ recipientName }: Props) {
     setFeedback(null);
     setInteractionId(null);
     setState("streaming");
+
+    const end = (s: State) => {
+      convo.current.state = s;
+      setState(s);
+    };
     try {
       await ask(
         text,
@@ -67,51 +104,116 @@ export function AskBox({ recipientName }: Props) {
         {
           onMeta: (m) => setInteractionId(m.interaction_id),
           onToken: (t) => {
-            answerRef.current += t;
-            setAnswer(answerRef.current);
+            convo.current.answer += t;
+            setAnswer(convo.current.answer);
+            opts.onToken?.(t);
           },
           onDone: (d) => {
             setLatency(d.latency_ms);
-            setState("done");
+            end("done");
           },
           onError: (msg) => {
+            convo.current.answer = msg;
             setAnswer(msg);
-            setState("error");
+            end("error");
           },
         },
         controller.signal,
+        { channel: opts.channel, sttMs: opts.sttMs },
       );
     } catch (err) {
-      if ((err as Error).name !== "AbortError") {
-        setAnswer("Couldn't reach the assistant. Check your connection and try again.");
-        setState("error");
+      if ((err as Error).name === "AbortError") return null;
+      const msg = "Couldn't reach the assistant. Check your connection and try again.";
+      convo.current.answer = msg;
+      setAnswer(msg);
+      end("error");
+    }
+    return convo.current.state === "done" ? convo.current.answer : null;
+  }
+
+  // ------------------------------------------------------------ voice agent
+
+  /** Hear one question: server Whisper if available, else the browser's recognizer. */
+  async function listen(signal: AbortSignal, config: VoiceConfig): Promise<{ text: string; sttMs?: number }> {
+    if (config.stt === "server" && canRecord) {
+      finishTalkingRef.current = new AbortController();
+      const audio = await recordUtterance({
+        signal,
+        finishNow: finishTalkingRef.current.signal,
+        onLevel: setLevel,
+        onSpeech: () => setVoice("hearing"),
+      });
+      if (!audio) return { text: "" };
+      setVoice("transcribing");
+      const { text, ms } = await api.transcribe(audio);
+      return { text: isPhantom(text) ? "" : text, sttMs: ms };
+    }
+    return { text: await recognizeInBrowser(signal) };
+  }
+
+  async function startVoice() {
+    if (voiceRef.current) return;
+    const controller = new AbortController();
+    voiceRef.current = controller;
+    setVoiceNote(null);
+    setVoice("starting");
+    try {
+      const config = (configRef.current ??= await api
+        .voiceConfig()
+        .catch((): VoiceConfig => ({ stt: "browser", tts: "browser" })));
+      if (config.stt === "browser" && !canRecognizeInBrowser) config.stt = "server";
+
+      let quiet = 0;
+      while (!controller.signal.aborted) {
+        setVoice("listening");
+        const { text, sttMs } = await listen(controller.signal, config);
+        if (!text.trim()) {
+          // Nothing heard twice in a row: the conversation is over.
+          if (++quiet >= 2) break;
+          continue;
+        }
+        quiet = 0;
+        setVoice("thinking");
+        const speaker = new Speaker(config.tts, () => setVoice("speaking"));
+        speakerRef.current = speaker;
+        const reply = await submit(text, { channel: "voice", sttMs, onToken: (t) => speaker.push(t) });
+        if (reply === null) speaker.push("Sorry, I couldn't answer that. ");
+        await speaker.finish();
       }
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        const denied = (err as Error).name === "NotAllowedError";
+        setVoiceNote(
+          denied ? "Microphone access was blocked. Allow it in the browser to talk." : "Voice stopped. Tap Talk to try again.",
+        );
+      }
+    } finally {
+      voiceRef.current = null;
+      speakerRef.current = null;
+      setVoice("off");
+      setLevel(0);
     }
   }
 
-  function toggleVoice() {
-    if (!SpeechRecognitionImpl) return;
-    if (listening) {
-      recognitionRef.current?.stop();
-      return;
-    }
-    const rec = new SpeechRecognitionImpl();
-    rec.lang = "en-IN";
-    rec.interimResults = false;
-    rec.onresult = (e) => void submit(e.results[0][0].transcript);
-    rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
-    recognitionRef.current = rec;
-    setListening(true);
-    rec.start();
+  function endVoice() {
+    voiceRef.current?.abort();
+    speakerRef.current?.stop();
   }
+
+  /** While it's speaking: stop talking and listen for the next question. */
+  function interrupt() {
+    speakerRef.current?.stop();
+  }
+
+  // ------------------------------------------------------------
 
   function startOver() {
     abortRef.current?.abort();
+    endVoice();
+    convo.current = { turns: [], asked: "", answer: "", state: "idle" };
     setTurns([]);
     setAsked("");
     setAnswer("");
-    answerRef.current = "";
     setState("idle");
   }
 
@@ -121,49 +223,78 @@ export function AskBox({ recipientName }: Props) {
     await api.feedback(interactionId, helpful).catch(() => setFeedback(null));
   }
 
+  const voiceOn = voice !== "off";
+
   return (
     <section className="panel" aria-labelledby="ask-title">
       <span className="label">Assistant</span>
       <h2 id="ask-title" className="panel__title display">
         Ask about today
       </h2>
-      <p className="panel__sub">Answers come only from today's list, never from guesswork.</p>
+      <p className="panel__sub">Type or talk. Answers come only from today's list, never from guesswork.</p>
 
-      <form
-        className="ask__bar"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submit(question);
-        }}
-      >
-        <input
-          className="input"
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder={
-            listening
-              ? "Listening…"
-              : state === "idle"
-                ? `e.g. Did ${recipientName} take the 8 pm tablet?`
-                : "Ask a follow-up…"
-          }
-          aria-label="Your question"
-          enterKeyHint="send"
-        />
-        {SpeechRecognitionImpl && (
-          <button
-            type="button"
-            className={`btn btn--quiet ${listening ? "btn--live" : ""}`}
-            onClick={toggleVoice}
-            aria-pressed={listening}
-          >
-            {listening ? "Stop" : "Speak"}
+      {voiceOn ? (
+        <div className={`voice voice--${voice}`} role="status" aria-live="polite">
+          <span className="label">Voice · {recipientName}'s day</span>
+          <p className="voice__status">{VOICE_STATUS[voice]}</p>
+          <div className="voice__meter" aria-hidden>
+            <span
+              style={{ transform: `scaleX(${voice === "listening" || voice === "hearing" ? Math.max(0.02, level) : 0})` }}
+            />
+          </div>
+          <div className="voice__actions">
+            {voice === "hearing" && (
+              <button type="button" className="btn btn--primary" onClick={() => finishTalkingRef.current?.abort()}>
+                Done talking
+              </button>
+            )}
+            {voice === "speaking" && (
+              <button type="button" className="btn btn--primary" onClick={interrupt}>
+                Skip
+              </button>
+            )}
+            <button type="button" className="btn btn--quiet" onClick={endVoice}>
+              End
+            </button>
+          </div>
+          <p className="voice__hint">
+            {voice === "speaking"
+              ? "After the answer, ask a follow-up. Just keep talking."
+              : "Ask anything about today. I'll stop listening when you pause."}
+          </p>
+        </div>
+      ) : (
+        <form
+          className="ask__bar"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit(question);
+          }}
+        >
+          <input
+            className="input"
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder={state === "idle" ? `e.g. Did ${recipientName} take the 8 pm tablet?` : "Ask a follow-up…"}
+            aria-label="Your question"
+            enterKeyHint="send"
+          />
+          {voiceSupported && (
+            <button
+              type="button"
+              className="btn btn--quiet"
+              onClick={() => void startVoice()}
+              disabled={state === "streaming"}
+            >
+              Talk
+            </button>
+          )}
+          <button className="btn btn--primary" disabled={state === "streaming" || !question.trim()}>
+            Ask
           </button>
-        )}
-        <button className="btn btn--primary" disabled={state === "streaming" || !question.trim()}>
-          Ask
-        </button>
-      </form>
+        </form>
+      )}
+      {voiceNote && <p className="error voice__note">{voiceNote}</p>}
 
       {state === "idle" ? (
         <div className="prompts">
@@ -187,7 +318,7 @@ export function AskBox({ recipientName }: Props) {
           )}
           <figure className={`answer answer--${state}`}>
             <blockquote className="answer__q">“{asked}”</blockquote>
-            <p className="answer__text" aria-live="polite" aria-busy={state === "streaming"}>
+            <p className="answer__text" aria-live={voiceOn ? "off" : "polite"} aria-busy={state === "streaming"}>
               {answer ? (
                 <>
                   {answer}
@@ -218,7 +349,7 @@ export function AskBox({ recipientName }: Props) {
               </figcaption>
             )}
           </figure>
-          {state !== "streaming" && (
+          {state !== "streaming" && !voiceOn && (
             <button type="button" className="btn btn--text start-over" onClick={startOver}>
               Start over
             </button>

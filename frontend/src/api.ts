@@ -35,6 +35,22 @@ export const api = {
   complete: (id: number) => request<Task>(`/api/tasks/${id}/complete`, post({})),
   reopen: (id: number) => request<Task>(`/api/tasks/${id}/reopen`, post({})),
   deleteTask: (id: number) => request<void>(`/api/tasks/${id}`, { method: "DELETE" }),
+  voiceConfig: () => request<{ stt: "server" | "browser"; tts: "server" | "browser" }>("/api/voice/config"),
+  transcribe: async (audio: Blob): Promise<{ text: string; ms: number }> => {
+    const res = await fetch("/api/voice/transcribe", {
+      method: "POST",
+      headers: { "Content-Type": audio.type.split(";")[0] || "audio/webm" },
+      body: audio,
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) throw new ApiError(res.status, body?.detail ?? "Couldn't transcribe", body);
+    return body;
+  },
+  speak: async (text: string): Promise<Blob> => {
+    const res = await fetch("/api/voice/speak", { ...post({ text }), headers: { "Content-Type": "application/json" } });
+    if (!res.ok) throw new ApiError(res.status, "No server voice", null);
+    return res.blob();
+  },
   feedback: (interactionId: number, helpful: boolean) =>
     request<void>(`/api/assistant/interactions/${interactionId}/feedback`, post({ helpful })),
 };
@@ -57,14 +73,20 @@ export interface AskHandlers {
  * POST response, so we read the body stream and split it into SSE frames
  * ("event: x\ndata: {...}\n\n") ourselves.
  */
+export interface AskOptions {
+  channel?: "text" | "voice";
+  sttMs?: number; // voice only: how long speech-to-text took, for the AI log
+}
+
 export async function ask(
   question: string,
   history: Turn[],
   handlers: AskHandlers,
   signal?: AbortSignal,
+  { channel = "text", sttMs }: AskOptions = {},
 ): Promise<void> {
   const res = await fetch("/api/assistant/ask", {
-    ...post({ question, history }),
+    ...post({ question, history, channel, stt_ms: sttMs }),
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
     signal,
   });
