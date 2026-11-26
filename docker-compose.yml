@@ -32,7 +32,7 @@ services:
       # Who speaks answers: browser (default) or deepgram (Aura voices, needs DEEPGRAM_API_KEY).
       TTS_PROVIDER: ${TTS_PROVIDER:-browser}
       DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY:-}
-      TTS_VOICE: ${TTS_VOICE:-aura-2-thalia-en}
+      TTS_VOICE: ${TTS_VOICE:-aura-asteria-en}
     depends_on:
       db:
         condition: service_healthy

@@ -28,7 +28,9 @@ class Settings(BaseSettings):
     tts_provider: str = "browser"
     deepgram_api_key: str = ""
     deepgram_base_url: str = "https://api.deepgram.com/v1"
-    tts_voice: str = "aura-2-thalia-en"
+    # aura-asteria-en: ~0.4 s per sentence. Aura-2 voices (e.g. aura-2-thalia-en) are
+    # newer but take ~1.3 s per sentence, which you hear as a pause before each answer.
+    tts_voice: str = "aura-asteria-en"
 
     # Signs session tokens. Set a long random value in any real deployment.
     auth_secret: str = "dev-only-change-me"

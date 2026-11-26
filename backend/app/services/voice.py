@@ -75,6 +75,42 @@ async def transcribe(settings: Settings, audio: bytes, content_type: str, hint: 
     return text, int((time.perf_counter() - started) * 1000)
 
 
+# One long-lived connection to Deepgram. A new TLS handshake costs 0.7-1.6 s from here,
+# which is longer than synthesising a sentence (~0.4 s), so reusing it matters most.
+_deepgram: httpx.AsyncClient | None = None
+
+
+def _deepgram_client(settings: Settings) -> httpx.AsyncClient:
+    global _deepgram
+    if _deepgram is None or _deepgram.is_closed:
+        _deepgram = httpx.AsyncClient(
+            base_url=settings.deepgram_base_url.rstrip("/"),
+            headers={"Authorization": f"Token {settings.deepgram_api_key}"},
+            timeout=settings.llm_timeout_seconds,
+            # Retry a connection that dropped while idle instead of failing the sentence.
+            transport=httpx.AsyncHTTPTransport(
+                retries=1, limits=httpx.Limits(max_keepalive_connections=4, keepalive_expiry=120)
+            ),
+        )
+    return _deepgram
+
+
+async def close_clients() -> None:
+    if _deepgram is not None:
+        await _deepgram.aclose()
+
+
+async def warm_up(settings: Settings) -> None:
+    """Open the Deepgram connection when voice mode starts, so the first sentence is fast.
+    (A cheap authenticated GET; it uses no credit.)"""
+    if not tts_enabled(settings):
+        return
+    try:
+        await _deepgram_client(settings).get("/projects")
+    except httpx.HTTPError:
+        pass  # the real request will try again
+
+
 async def synthesize(
     settings: Settings, text: str, transport: httpx.AsyncBaseTransport | None = None
 ) -> tuple[bytes, str]:
@@ -84,12 +120,19 @@ async def synthesize(
     """
     if not tts_enabled(settings):
         raise VoiceUnavailable("text-to-speech is not configured")
-    async with httpx.AsyncClient(timeout=settings.llm_timeout_seconds, transport=transport) as client:
-        resp = await client.post(
-            f"{settings.deepgram_base_url.rstrip('/')}/speak",
-            params={"model": settings.tts_voice, "encoding": "mp3"},
+    if transport is not None:  # tests
+        async with httpx.AsyncClient(
+            base_url=settings.deepgram_base_url.rstrip("/"),
             headers={"Authorization": f"Token {settings.deepgram_api_key}"},
-            json={"text": text},
-        )
-        resp.raise_for_status()
+            transport=transport,
+        ) as client:
+            return await _speak(client, settings, text)
+    return await _speak(_deepgram_client(settings), settings, text)
+
+
+async def _speak(client: httpx.AsyncClient, settings: Settings, text: str) -> tuple[bytes, str]:
+    resp = await client.post(
+        "/speak", params={"model": settings.tts_voice, "encoding": "mp3"}, json={"text": text}
+    )
+    resp.raise_for_status()
     return resp.content, resp.headers.get("content-type", "audio/mpeg").split(";")[0]

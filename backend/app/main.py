@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.db import Base, SessionLocal, engine
 from app.routers import assistant, auth, tasks, voice
+from app.services.voice import close_clients
 from app.seed import seed
 
 logging.basicConfig(level=logging.INFO)
@@ -21,6 +22,7 @@ async def lifespan(_: FastAPI):
             if seed(db):
                 logging.info("Seeded demo family")
     yield
+    await close_clients()
 
 
 app = FastAPI(title="CareCircle Lite", lifespan=lifespan)

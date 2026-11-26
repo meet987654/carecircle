@@ -1,7 +1,7 @@
 import logging
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -17,9 +17,11 @@ log = logging.getLogger(__name__)
 
 
 @router.get("/config", response_model=VoiceConfigOut)
-def config(_: CareRecipient = Depends(current_recipient)):
-    """Tells the browser which parts of the pipeline the server handles."""
+def config(background: BackgroundTasks, _: CareRecipient = Depends(current_recipient)):
+    """Tells the browser which parts of the pipeline the server handles. Called when voice
+    mode starts, so it also opens the TTS connection ahead of the first answer."""
     settings = get_settings()
+    background.add_task(voice.warm_up, settings)
     return VoiceConfigOut(
         stt="server" if voice.stt_enabled(settings) else "browser",
         tts="server" if voice.tts_enabled(settings) else "browser",

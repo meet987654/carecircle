@@ -204,15 +204,19 @@ def test_deepgram_voice_request_and_speak_endpoint(client, monkeypatch):
     settings = Settings(tts_provider="deepgram", deepgram_api_key="dg-key")
     audio, media_type = asyncio.run(voice.synthesize(settings, "Ravi gave the tablet.", httpx.MockTransport(handler)))
     assert (audio, media_type) == (b"ID3mp3", "audio/mpeg")
-    assert sent["url"].startswith("https://api.deepgram.com/v1/speak?model=aura-2-thalia-en&encoding=mp3")
+    assert sent["url"].startswith("https://api.deepgram.com/v1/speak?model=aura-asteria-en&encoding=mp3")
     assert sent["auth"] == "Token dg-key" and sent["body"] == {"text": "Ravi gave the tablet."}
 
     # Through the API: config says the server speaks, and /speak returns the audio.
     async def fake_synthesize(s, text):
         return b"ID3mp3", "audio/mpeg"
 
+    async def no_warm_up(s):
+        return None
+
     monkeypatch.setattr(router, "get_settings", lambda: settings)
     monkeypatch.setattr(voice, "synthesize", fake_synthesize)
+    monkeypatch.setattr(voice, "warm_up", no_warm_up)
     assert client.get("/api/voice/config").json()["tts"] == "server"
     r = client.post("/api/voice/speak", json={"text": "Hello"})
     assert r.status_code == 200 and r.headers["content-type"] == "audio/mpeg" and r.content == b"ID3mp3"
