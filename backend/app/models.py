@@ -54,6 +54,9 @@ class FamilyMember(Base):
     recipient_id: Mapped[int] = mapped_column(ForeignKey("care_recipients.id"))
     name: Mapped[str] = mapped_column(String(100))
     relation: Mapped[str | None] = mapped_column(String(50))
+    # Login. Stored lower-cased; null means the member can't log in (yet).
+    email: Mapped[str | None] = mapped_column(String(254), unique=True)
+    password_hash: Mapped[str | None] = mapped_column(String(200))
 
     recipient: Mapped[CareRecipient] = relationship(back_populates="members")
 

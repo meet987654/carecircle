@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth import hash_password
 from app.models import (
     CareRecipient,
     CareTask,
@@ -18,6 +19,9 @@ from app.models import (
     TaskStatus,
 )
 from app.services.tasks import ensure_daily_instances
+
+# Every demo member logs in with their own email and this password (shown on the login screen).
+DEMO_PASSWORD = "carecircle"
 
 DAILY = [
     ("Metformin 500 mg (after breakfast)", TaskCategory.medicine, time(9, 0)),
@@ -35,9 +39,18 @@ def seed(db: Session, now: datetime | None = None) -> bool:
     mum = CareRecipient(name="Kamala Sharma", display_name="Mum", timezone="Asia/Kolkata")
     db.add(mum)
     db.flush()
-    ravi = FamilyMember(recipient_id=mum.id, name="Ravi", relation="Son")
-    priya = FamilyMember(recipient_id=mum.id, name="Priya", relation="Daughter")
-    anil = FamilyMember(recipient_id=mum.id, name="Anil", relation="Son-in-law")
+    def member(name: str, relation: str) -> FamilyMember:
+        return FamilyMember(
+            recipient_id=mum.id,
+            name=name,
+            relation=relation,
+            email=f"{name.lower()}@carecircle.demo",
+            password_hash=hash_password(DEMO_PASSWORD),
+        )
+
+    ravi = member("Ravi", "Son")
+    priya = member("Priya", "Daughter")
+    anil = member("Anil", "Son-in-law")
     db.add_all([ravi, priya, anil])
     for title, category, at in DAILY:
         db.add(TaskSchedule(recipient_id=mum.id, title=title, category=category, time_of_day=at))

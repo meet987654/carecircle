@@ -17,6 +17,17 @@ class MemberOut(ORM):
     relation: str | None
 
 
+class LoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=200)
+
+
+class LoginOut(BaseModel):
+    member: MemberOut
+    # Also set as an httpOnly cookie; returned for API clients that prefer a Bearer header.
+    token: str
+
+
 class RecipientOut(ORM):
     id: int
     name: str
@@ -56,7 +67,6 @@ class TaskCreate(BaseModel):
     # so a relative abroad adding "8 pm" means 8 pm where Mum is.
     due_at: datetime
     repeats_daily: bool = False
-    created_by_id: int | None = None
 
 
 class TaskUpdate(BaseModel):
@@ -64,10 +74,6 @@ class TaskUpdate(BaseModel):
     category: TaskCategory | None = None
     notes: str | None = Field(default=None, max_length=2000)
     due_at: datetime | None = None
-
-
-class CompleteRequest(BaseModel):
-    member_id: int
 
 
 class TodayOut(BaseModel):
@@ -81,7 +87,6 @@ class TodayOut(BaseModel):
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=500)
-    member_id: int | None = None
 
 
 class InteractionOut(ORM):

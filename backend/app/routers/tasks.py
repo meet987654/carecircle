@@ -6,9 +6,10 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps import current_recipient, require_member, utcnow
-from app.models import CareRecipient, CareTask, TaskSchedule, TaskStatus
-from app.schemas import CompleteRequest, RecipientOut, TaskCreate, TaskOut, TaskUpdate, TodayOut
+from app.auth import current_member
+from app.deps import current_recipient, utcnow
+from app.models import CareRecipient, CareTask, FamilyMember, TaskSchedule, TaskStatus
+from app.schemas import RecipientOut, TaskCreate, TaskOut, TaskUpdate, TodayOut
 from app.services import tasks as svc
 
 router = APIRouter(prefix="/api")
@@ -60,9 +61,8 @@ def create_task(
     body: TaskCreate,
     db: Session = Depends(get_db),
     recipient: CareRecipient = Depends(current_recipient),
+    member: FamilyMember = Depends(current_member),
 ):
-    if body.created_by_id is not None:
-        require_member(db, recipient, body.created_by_id)
     due_at = _localize(body.due_at, recipient)
 
     schedule_id = None
@@ -86,7 +86,7 @@ def create_task(
         notes=body.notes,
         due_at=due_at,
         status=TaskStatus.pending,
-        created_by_id=body.created_by_id,
+        created_by_id=member.id,
     )
     db.add(task)
     db.commit()
@@ -136,14 +136,14 @@ def delete_task(
 )
 def complete_task(
     task_id: int,
-    body: CompleteRequest,
     db: Session = Depends(get_db),
     recipient: CareRecipient = Depends(current_recipient),
+    member: FamilyMember = Depends(current_member),
 ):
+    """Recorded as done by whoever is logged in, never by an id the client sends."""
     _get_task(db, recipient, task_id)
-    require_member(db, recipient, body.member_id)
     try:
-        task = svc.complete_task(db, task_id, body.member_id, utcnow())
+        task = svc.complete_task(db, task_id, member.id, utcnow())
     except svc.TaskAlreadyDone as exc:
         done = exc.task
         who = done.completed_by.name if done.completed_by else "Someone"

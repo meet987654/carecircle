@@ -20,6 +20,8 @@ os.environ["DATABASE_URL"] = TEST_DB_URL
 os.environ["SEED_DEMO_DATA"] = "false"
 os.environ["ASSISTANT_PROVIDER"] = "template"
 
+PASSWORD = "test-password"
+
 
 def _ensure_database() -> bool:
     url = make_url(TEST_DB_URL)
@@ -39,12 +41,14 @@ DB_AVAILABLE = _ensure_database()
 
 
 @pytest.fixture
-def client():
+def anon_client():
+    """A client for a fresh database, not logged in."""
     if not DB_AVAILABLE:
         pytest.skip(f"Postgres not reachable at {TEST_DB_URL}")
 
     from fastapi.testclient import TestClient
 
+    from app.auth import hash_password
     from app.db import Base, SessionLocal, engine
     from app.main import app
     from app.models import CareRecipient, FamilyMember
@@ -55,11 +59,23 @@ def client():
         mum = CareRecipient(name="Kamala", display_name="Mum", timezone="Asia/Kolkata")
         db.add(mum)
         db.flush()
+        hashed = hash_password(PASSWORD)
         db.add_all([
-            FamilyMember(recipient_id=mum.id, name="Ravi"),
-            FamilyMember(recipient_id=mum.id, name="Priya"),
+            FamilyMember(recipient_id=mum.id, name="Ravi", email="ravi@test", password_hash=hashed),
+            FamilyMember(recipient_id=mum.id, name="Priya", email="priya@test", password_hash=hashed),
         ])
         db.commit()
 
     with TestClient(app) as c:
         yield c
+
+
+def login(client, email: str = "ravi@test", password: str = PASSWORD):
+    return client.post("/api/auth/login", json={"email": email, "password": password})
+
+
+@pytest.fixture
+def client(anon_client):
+    """Logged in as Ravi (the session cookie is kept by the client)."""
+    assert login(anon_client).status_code == 200
+    return anon_client

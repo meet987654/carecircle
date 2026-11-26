@@ -20,12 +20,11 @@ def make_task(client, title, due_at, **extra):
 
 
 def test_today_endpoint_buckets_and_records_who_did_it(client):
-    ravi = client.get("/api/recipient").json()["members"][0]
     late = make_task(client, "Morning BP", NOW() - timedelta(hours=2))
     now_due = make_task(client, "Insulin", NOW())
     done = make_task(client, "Metformin", NOW() - timedelta(hours=1))
 
-    r = client.post(f"/api/tasks/{done['id']}/complete", json={"member_id": ravi["id"]})
+    r = client.post(f"/api/tasks/{done['id']}/complete")
     assert r.status_code == 200
     assert r.json()["completed_by"]["name"] == "Ravi"
     assert r.json()["completed_at"] is not None
@@ -69,7 +68,7 @@ def test_two_people_marking_done_at_once_only_one_wins(client):
     assert outcomes.count("already_done") == len(threads) - 1
 
     # And over HTTP the loser is told who beat them, with a 409.
-    r = client.post(f"/api/tasks/{task['id']}/complete", json={"member_id": members[0]["id"]})
+    r = client.post(f"/api/tasks/{task['id']}/complete")
     assert r.status_code == 409
     assert "already marked this done" in r.json()["detail"]
     assert r.json()["task"]["status"] == "done"
@@ -96,7 +95,7 @@ def test_ask_streams_tokens_and_logs_the_interaction(client):
     ravi = client.get("/api/recipient").json()["members"][0]
     make_task(client, "BP tablet", NOW() - timedelta(hours=2))
 
-    with client.stream("POST", "/api/assistant/ask", json={"question": "Any medicine pending?", "member_id": ravi["id"]}) as r:
+    with client.stream("POST", "/api/assistant/ask", json={"question": "Any medicine pending?"}) as r:
         assert r.headers["content-type"].startswith("text/event-stream")
         r.read()
         events = read_sse(r)
@@ -109,6 +108,7 @@ def test_ask_streams_tokens_and_logs_the_interaction(client):
     log = client.get("/api/assistant/interactions").json()[0]
     assert log["id"] == events[0][1]["interaction_id"]
     assert log["question"] == "Any medicine pending?"
+    assert log["member_id"] == ravi["id"]
     assert log["answer"] == answer
     assert log["context"]["overdue"][0]["title"] == "BP tablet"
     assert log["status"] == "ok" and log["latency_ms"] >= log["first_token_ms"] >= 0

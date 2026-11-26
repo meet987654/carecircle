@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     llm_model: str = "qwen/qwen3.8-27b"
     llm_timeout_seconds: float = 20.0
 
+    # Signs session tokens. Set a long random value in any real deployment.
+    auth_secret: str = "dev-only-change-me"
+    session_days: int = 30
+    # True behind HTTPS so the session cookie is never sent over plain HTTP.
+    cookie_secure: bool = False
+
     seed_demo_data: bool = True
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
 

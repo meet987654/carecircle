@@ -21,8 +21,9 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import SessionLocal, get_db
-from app.deps import current_recipient, require_member, utcnow
-from app.models import AIInteraction, CareRecipient
+from app.auth import current_member
+from app.deps import current_recipient, utcnow
+from app.models import AIInteraction, CareRecipient, FamilyMember
 from app.schemas import AskRequest, FeedbackRequest, InteractionOut
 from app.services.assistant import TemplateProvider, build_context, get_provider
 from app.services.tasks import get_today
@@ -49,10 +50,8 @@ def ask(
     body: AskRequest,
     db: Session = Depends(get_db),
     recipient: CareRecipient = Depends(current_recipient),
+    member: FamilyMember = Depends(current_member),
 ):
-    if body.member_id is not None:
-        require_member(db, recipient, body.member_id)
-
     settings = get_settings()
     provider = get_provider(settings)
     now = utcnow()
@@ -61,7 +60,7 @@ def ask(
 
     interaction = AIInteraction(
         recipient_id=recipient.id,
-        member_id=body.member_id,
+        member_id=member.id,
         question=question,
         context=context,
         prompt=provider.prompt(question, context),
@@ -124,18 +123,30 @@ def ask(
 
 
 @router.get("/interactions", response_model=list[InteractionOut])
-def list_interactions(limit: int = 50, db: Session = Depends(get_db)):
+def list_interactions(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    recipient: CareRecipient = Depends(current_recipient),
+):
     """For the team to review what was asked, what the assistant saw and said, and how fast."""
     rows = db.scalars(
-        select(AIInteraction).order_by(AIInteraction.id.desc()).limit(min(limit, 200))
+        select(AIInteraction)
+        .where(AIInteraction.recipient_id == recipient.id)
+        .order_by(AIInteraction.id.desc())
+        .limit(min(limit, 200))
     ).all()
     return rows
 
 
 @router.post("/interactions/{interaction_id}/feedback", status_code=204)
-def feedback(interaction_id: int, body: FeedbackRequest, db: Session = Depends(get_db)):
+def feedback(
+    interaction_id: int,
+    body: FeedbackRequest,
+    db: Session = Depends(get_db),
+    recipient: CareRecipient = Depends(current_recipient),
+):
     row = db.get(AIInteraction, interaction_id)
-    if row is None:
+    if row is None or row.recipient_id != recipient.id:
         raise HTTPException(404, "Interaction not found")
     row.feedback = 1 if body.helpful else -1
     db.commit()
