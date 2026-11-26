@@ -124,13 +124,13 @@ old the list is.
 5. Alembic migrations, editing and pausing schedules from the UI, a weekly history view, an offline queue for taps.
 
 ## AI tools used
-- **Claude Code (Claude Opus):** scaffolding the project, first drafts of most backend and frontend code,
-  tests, Docker/CI config, and reviewing the UI through screenshots of a headless browser. I reviewed every
-  file, and the design decisions above (timezone semantics, overdue rules, atomic completion, lazy
+- **Claude Code:** used throughout as a pair programmer for scaffolding, backend and frontend code, tests,
+  Docker/CI config, and UI iteration (checked with headless-browser screenshots). I directed the design
+  and reviewed the output. The decisions above (timezone semantics, overdue rules, atomic completion, lazy
   schedules, grounded assistant) are mine to defend and change.
 
 ## Time spent
-_≈ X hours_ (fill in before submitting)
+About 2 hours.
 
 ## Layout
 ```
