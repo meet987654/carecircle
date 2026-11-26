@@ -25,7 +25,7 @@ Sign in as one of them (the login screen lists the demo accounts, tap one), then
 | --- | --- |
 | `ravi@carecircle.demo`, `priya@carecircle.demo`, `anil@carecircle.demo` | `carecircle` |
 
-**Tests** (24, against a real Postgres):
+**Tests** (25, against a real Postgres):
 
 ```bash
 docker compose run --rm api pytest -v
@@ -34,9 +34,12 @@ docker compose run --rm api pytest -v
 or locally: `docker compose up -d db`, then `cd backend && pip install -r requirements.txt && pytest`.
 CI runs the same tests and the frontend type-check/build on every push (`.github/workflows/ci.yml`).
 
-**Optional LLM:** the assistant works with no API key. To use Groq or a local Ollama model instead,
-copy `.env.example` to `.env`, uncomment one block and run `docker compose up` again. If the LLM fails
-before sending anything, the answer falls back to the template, and the log records why.
+**Optional keys:** everything works with no API keys (template answers, the browser's own speech).
+To upgrade, copy `.env.example` to `.env`, uncomment what you want and run `docker compose up` again:
+- a **Groq** key gives LLM answers and Whisper speech-to-text
+- a **Deepgram** key gives a natural voice for spoken answers
+
+If a service fails, the app falls back (template answer, browser voice), and the log records why.
 
 **Frontend dev with hot reload:** `docker compose up db api`, then `cd frontend && npm install && npm run dev`
 (http://localhost:5173, proxies `/api` to :8000).
@@ -115,8 +118,12 @@ conversation is saved in the logged context, so a follow-up's answer can be unde
 - **Answering:** the normal `/api/assistant/ask` SSE stream. Voice and text share one conversation, one
   grounding and one fallback, and the log records `channel=voice` and `stt_ms`.
 - **Speaking:** the streamed answer is cut into sentences and each one is spoken as soon as it is complete, so
-  speech starts before the answer has finished. The browser's voice is used by default (free and instant;
-  Edge has natural voices). A server voice (Groq Orpheus) is an env flag away (`TTS_MODEL`).
+  speech starts before the answer has finished. With `TTS_PROVIDER=deepgram`, each sentence is turned into
+  speech by **Deepgram Aura** (`POST /api/voice/speak`, MP3, about 0.3 s, free credit). Each sentence's audio
+  is requested the moment the sentence is complete, so it's usually ready before the previous one ends. With
+  no key, or if a request fails, the browser's own voice speaks instead.
+  *(I also tried Kokoro, an open-source model running locally: no key needed, but about 2.5 s per sentence on
+  a laptop CPU, too slow for conversation.)*
 - **Turn-taking:** half-duplex on purpose. It never listens while speaking, so the phone can't hear its own
   answer as a question. **Skip** interrupts it, it listens again for a follow-up after each answer, and it
   stops after two silences.
