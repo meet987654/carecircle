@@ -72,3 +72,34 @@ def test_template_stream_reassembles_to_full_answer():
     chunks = asyncio.run(collect())
     assert len(chunks) > 3
     assert "".join(chunks) == compose_answer("status?", ctx)
+
+
+def test_follow_up_keeps_the_subject_of_the_conversation():
+    from app.services.assistant import resolve_followup
+
+    ctx = make_context()
+    first = "Did mom have any medicine to take today?"
+    history = [{"question": first, "answer": compose_answer(first, ctx)}]
+
+    follow_up = resolve_followup("Did she take it?", history, ctx)
+    answer = compose_answer(follow_up, ctx)
+    # Still about medicines: who gave them, and what's still pending. Not the call.
+    assert "Ravi did the 9 am BP tablet" in answer and "Priya did the 10 am Metformin" in answer
+    assert "8 pm BP tablet, 1 h late" in answer
+    assert "Call" not in answer
+
+    # A question that names its own subject is left alone.
+    assert resolve_followup("Is the call done?", history, ctx) == "Is the call done?"
+    # With no earlier subject there is nothing to carry over.
+    assert resolve_followup("Did she take it?", [], ctx) == "Did she take it?"
+
+
+def test_llm_gets_earlier_turns_as_chat_messages():
+    from app.config import Settings
+    from app.services.assistant import OpenAICompatibleProvider
+
+    history = [{"question": "Any medicine today?", "answer": "Yes, BP tablet at 8 pm."}]
+    messages = OpenAICompatibleProvider(Settings()).messages("Did she take it?", make_context(), history)
+    assert [m["role"] for m in messages] == ["system", "user", "assistant", "user"]
+    assert "TODAY'S TASKS" in messages[0]["content"]
+    assert messages[-1]["content"] == "Did she take it?"

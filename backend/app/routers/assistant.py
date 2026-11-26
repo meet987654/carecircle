@@ -57,13 +57,15 @@ def ask(
     now = utcnow()
     context = build_context(recipient, get_today(db, recipient, now), now)
     question = body.question.strip()
+    history = [t.model_dump() for t in body.history]
 
     interaction = AIInteraction(
         recipient_id=recipient.id,
         member_id=member.id,
         question=question,
-        context=context,
-        prompt=provider.prompt(question, context),
+        # Logged with the conversation so a follow-up's answer can be understood later.
+        context={**context, "conversation": history} if history else context,
+        prompt=provider.prompt(question, context, history),
         provider=provider.name,
         model=provider.model,
         status="streaming",
@@ -79,7 +81,7 @@ def ask(
         result = {"status": "ok", "error": None, "first_token_ms": None}
 
         async def relay(source):
-            async for chunk in source.stream(question, context):
+            async for chunk in source.stream(question, context, history):
                 if result["first_token_ms"] is None:
                     result["first_token_ms"] = elapsed()
                 answer.append(chunk)

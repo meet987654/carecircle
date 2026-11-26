@@ -85,8 +85,18 @@ class TodayOut(BaseModel):
     done: list[TaskOut]
 
 
+class Turn(BaseModel):
+    """An earlier question and answer in the same conversation."""
+
+    question: str = Field(max_length=500)
+    answer: str = Field(max_length=2000)
+
+
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=500)
+    # Earlier turns, oldest first, so follow-ups like "did she take it?" make sense.
+    # The client keeps the conversation; the server stays stateless.
+    history: list[Turn] = Field(default_factory=list, max_length=6)
 
 
 class InteractionOut(ORM):

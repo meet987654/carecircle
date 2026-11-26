@@ -101,7 +101,7 @@ TOPIC_WORDS: dict[str, frozenset[str]] = {
 }
 TOPIC_LABEL = {"medicine": "medicines", "appointment": "appointments", "call": "calls"}
 REMAINING_WORDS = _vocab("left pending remaining still missed overdue next due")
-DONE_WORDS = _vocab("who done did given gave completed finished taken")
+DONE_WORDS = _vocab("who done did given gave completed finished taken take took")
 STOP_WORDS = _vocab(
     "a an the is was has have had her his their mum mom dad papa today what when s any "
     "anything get got of to for and or it does do she he they with on in am pm evening "
@@ -115,6 +115,32 @@ def detect_topic(question: str) -> str | None:
         if words & keywords:
             return topic
     return None
+
+
+def _subject_words(question: str, context: dict) -> set[str]:
+    """The words that say *what* a question is about: a category word or part of a task title."""
+    words = _words(question)
+    topic_words = words & frozenset().union(*TOPIC_WORDS.values())
+    everything = context["overdue"] + context["due"] + context["done"]
+    named = words - STOP_WORDS - DONE_WORDS - REMAINING_WORDS
+    title_words = {w for w in named if any(w in _words(i["title"]) for i in everything)}
+    return topic_words | title_words
+
+
+def resolve_followup(question: str, history: list[dict], context: dict) -> str:
+    """Give a follow-up like "did she take it?" the subject of the conversation so far.
+
+    If the question names no task or category, borrow the subject words of the most
+    recent earlier question that did. Only the subject carries over, not the intent:
+    "what's left?" followed by "who did it?" still answers who did it.
+    """
+    if _subject_words(question, context):
+        return question
+    for turn in reversed(history):
+        carried = _subject_words(turn["question"], context)
+        if carried:
+            return f"{question} ({' '.join(sorted(carried))})"
+    return question
 
 
 def _join(parts: list[str]) -> str:
@@ -194,8 +220,10 @@ def compose_answer(question: str, context: dict) -> str:
 SYSTEM_PROMPT = (
     "You help a family coordinate the care of an elderly relative. Answer the "
     "question in at most three short, plain sentences using ONLY the facts in the "
-    "JSON of today's tasks. Say who did things and at what time. If the facts do "
-    "not answer the question, say so. Never give medical advice or invent tasks."
+    "JSON of today's tasks. Say who did things and at what time, and say when "
+    "something was done late. Follow-up questions (\"did she take it?\") refer to "
+    "the earlier conversation. If the facts do not answer the question, say so. "
+    "Never give medical advice or invent tasks."
 )
 
 
@@ -206,11 +234,11 @@ class TemplateProvider:
     def __init__(self, chunk_delay: float = 0.025):
         self.chunk_delay = chunk_delay
 
-    def prompt(self, question: str, context: dict) -> str | None:
+    def prompt(self, question: str, context: dict, history: list[dict] = ()) -> str | None:
         return None
 
-    async def stream(self, question: str, context: dict) -> AsyncIterator[str]:
-        answer = compose_answer(question, context)
+    async def stream(self, question: str, context: dict, history: list[dict] = ()) -> AsyncIterator[str]:
+        answer = compose_answer(resolve_followup(question, list(history), context), context)
         # Emit word by word so the UI streams the same way it would for an LLM.
         for chunk in re.findall(r"\S+\s*", answer):
             yield chunk
@@ -226,23 +254,31 @@ class OpenAICompatibleProvider:
         self.model = settings.llm_model
         self.timeout = settings.llm_timeout_seconds
 
-    def messages(self, question: str, context: dict) -> list[dict]:
-        return [
-            {"role": "system", "content": SYSTEM_PROMPT},
+    def messages(self, question: str, context: dict, history: list[dict] = ()) -> list[dict]:
+        # Today's facts live in the system message, so the earlier turns can be
+        # real chat messages and the latest question is always the last one.
+        messages = [
             {
-                "role": "user",
-                "content": f"TODAY'S TASKS:\n{json.dumps(context, indent=1)}\n\nQUESTION: {question}",
-            },
+                "role": "system",
+                "content": f"{SYSTEM_PROMPT}\n\nTODAY'S TASKS:\n{json.dumps(context, indent=1)}",
+            }
         ]
+        for turn in history:
+            messages.append({"role": "user", "content": turn["question"]})
+            messages.append({"role": "assistant", "content": turn["answer"]})
+        messages.append({"role": "user", "content": question})
+        return messages
 
-    def prompt(self, question: str, context: dict) -> str:
-        return "\n\n".join(f"[{m['role']}]\n{m['content']}" for m in self.messages(question, context))
+    def prompt(self, question: str, context: dict, history: list[dict] = ()) -> str:
+        return "\n\n".join(
+            f"[{m['role']}]\n{m['content']}" for m in self.messages(question, context, history)
+        )
 
-    async def stream(self, question: str, context: dict) -> AsyncIterator[str]:
+    async def stream(self, question: str, context: dict, history: list[dict] = ()) -> AsyncIterator[str]:
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         body = {
             "model": self.model,
-            "messages": self.messages(question, context),
+            "messages": self.messages(question, context, history),
             "stream": True,
             "temperature": 0.2,
             "max_tokens": 300,

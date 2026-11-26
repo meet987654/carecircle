@@ -131,3 +131,17 @@ def test_ask_falls_back_to_template_when_llm_is_down(client, monkeypatch):
     log = client.get("/api/assistant/interactions").json()[0]
     assert log["status"] == "fallback" and log["error"]
     assert log["answer"].startswith("There is nothing")
+
+
+def test_follow_up_question_uses_the_conversation_and_is_logged(client):
+    make_task(client, "BP tablet", NOW() - timedelta(hours=2))
+    make_task(client, "Physio call", NOW() + timedelta(hours=1))
+    history = [{"question": "Any medicine for Mum today?", "answer": "The BP tablet is 2 h late."}]
+
+    with client.stream("POST", "/api/assistant/ask", json={"question": "Did she take it?", "history": history}) as r:
+        r.read()
+        answer = "".join(d["text"] for e, d in read_sse(r) if e == "token")
+
+    assert "BP tablet" in answer and "Physio" not in answer
+    log = client.get("/api/assistant/interactions").json()[0]
+    assert log["context"]["conversation"] == history
