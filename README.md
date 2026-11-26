@@ -25,7 +25,7 @@ Sign in as one of them (the login screen lists the demo accounts, tap one), then
 | --- | --- |
 | `ravi@carecircle.demo`, `priya@carecircle.demo`, `anil@carecircle.demo` | `carecircle` |
 
-**Tests** (19, against a real Postgres):
+**Tests** (22, against a real Postgres):
 
 ```bash
 docker compose run --rm api pytest -v
@@ -97,6 +97,12 @@ sees exactly what the assistant saw. The default **template provider** narrows t
 "who/did" questions, and never invents anything. An **OpenAI-compatible provider** (Groq, Ollama, OpenAI)
 gets the same context with a strict system prompt. Both stream through the same SSE path. The template
 streams word by word, so the UI behaves the same either way.
+
+**Follow-up questions work.** The browser keeps the conversation and sends the last 6 turns with each
+question, so the server stays stateless. The LLM gets them as real chat turns, with today's facts in the
+system message. The template provider handles "did she take it?" by carrying over the *subject* of the last
+question that had one (a task or a category), not its intent, so "who did it?" still answers who did it. The
+conversation is saved in the logged context, so a follow-up's answer can be understood later.
 
 **SSE over POST, read with `fetch`**, rather than `EventSource` (GET-only) or WebSockets (two-way, which this
 doesn't need). nginx has `proxy_buffering off` so tokens aren't held back. The log row is written at the
