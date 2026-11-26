@@ -148,8 +148,10 @@ endpoint except login and health needs a session, and **the family comes from th
 queries (including the AI log) are scoped to that family. Both the completer and the asker come from the
 session, never from the request body. All standard library, no new dependencies.
 
-**UI for a tired caregiver on a phone:** 18px base text, 56px+ tap targets, and every state shown in both
-colour and words ("2 h 10 min late", "Done by Ravi at 9:07 am"). Overdue comes first and only appears
+**UI for a tired caregiver on a phone:** calm and familiar on purpose. One typeface (Inter), neutral greys, and
+colour only where it means something (red = late, green = done). Each section is a grouped list with a check
+circle, title and right-aligned time (the iOS Reminders / Things pattern). 17px text, 44px+ tap targets, and every
+state shown in both colour and words ("2 h 10 min late", "Done by Ravi at 9:07 am"). Overdue comes first and only appears
 when non-empty. No menus or modals: the add form opens inline, and who you are (with sign out) is always visible.
 Done is **optimistic** with a 7-second **Undo**, because mis-taps happen at 6 am. The list refreshes every 30 s
 and when the phone wakes, so you see what the others did. If the connection drops, a banner shows how
