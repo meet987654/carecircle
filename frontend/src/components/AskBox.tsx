@@ -10,25 +10,16 @@ import {
   voiceSupported,
   type VoiceConfig,
 } from "../voice";
+import { VoiceOverlay, type VoiceState } from "./VoiceOverlay";
 
 interface Props {
   recipientName: string;
 }
 
 type State = "idle" | "streaming" | "done" | "error";
-type VoiceState = "off" | "starting" | "listening" | "hearing" | "transcribing" | "thinking" | "speaking";
 
 // How many earlier turns to send. Enough for follow-ups, small enough to keep prompts short.
 const MAX_HISTORY = 6;
-
-const VOICE_STATUS: Record<Exclude<VoiceState, "off">, string> = {
-  starting: "Getting the microphone…",
-  listening: "Listening…",
-  hearing: "Go on, I'm listening…",
-  transcribing: "Got it…",
-  thinking: "Checking today's list…",
-  speaking: "Speaking…",
-};
 
 interface SubmitOptions {
   channel?: "text" | "voice";
@@ -82,7 +73,9 @@ export function AskBox({ recipientName }: Props) {
 
     // The answer on screen becomes part of the history this question is asked with.
     const history =
-      c.state === "done" && c.asked ? [...c.turns, { question: c.asked, answer: c.answer }].slice(-MAX_HISTORY) : c.turns;
+      c.state === "done" && c.asked
+        ? [...c.turns, { question: c.asked, answer: c.answer }].slice(-MAX_HISTORY)
+        : c.turns;
     convo.current = { turns: history, asked: text, answer: "", state: "streaming" };
     setTurns(history);
     setAsked(text);
@@ -186,7 +179,9 @@ export function AskBox({ recipientName }: Props) {
       if ((err as Error).name !== "AbortError") {
         const denied = (err as Error).name === "NotAllowedError";
         setVoiceNote(
-          denied ? "Microphone access was blocked. Allow it in the browser to talk." : "Voice stopped. Tap Talk to try again.",
+          denied
+            ? "Microphone access was blocked. Allow it in the browser to talk."
+            : "Voice stopped. Tap Talk to try again.",
         );
       }
     } finally {
@@ -226,7 +221,6 @@ export function AskBox({ recipientName }: Props) {
   }
 
   const voiceOn = voice !== "off";
-  const voiceBusy = voice === "transcribing" || voice === "thinking" || voice === "speaking" || voice === "starting";
 
   return (
     <section className="section" aria-labelledby="ask-title">
@@ -234,64 +228,42 @@ export function AskBox({ recipientName }: Props) {
         <h2 id="ask-title" className="section__title">
           Ask about today
         </h2>
-        {voiceSupported && !voiceOn && (
-          <button type="button" className="talk" onClick={() => void startVoice()} disabled={state === "streaming"}>
-            Talk instead
-          </button>
-        )}
       </div>
 
       <div className="ask">
-        {voiceOn ? (
-          <div className={`voice ${voiceBusy ? "voice--busy" : ""}`} role="status" aria-live="polite">
-            <p className="voice__status">{VOICE_STATUS[voice]}</p>
-            <div className="voice__meter" aria-hidden>
-              <span
-                style={{ transform: `scaleX(${voice === "listening" || voice === "hearing" ? Math.max(0.02, level) : 0})` }}
-              />
-            </div>
-            <p className="voice__hint">
-              {voice === "speaking"
-                ? "When it finishes, just ask a follow-up."
-                : "Ask anything about today. It stops listening when you pause."}
-            </p>
-            <div className="voice__actions">
-              {voice === "hearing" && (
-                <button type="button" className="btn btn--primary" onClick={() => finishTalkingRef.current?.abort()}>
-                  Done talking
-                </button>
-              )}
-              {voice === "speaking" && (
-                <button type="button" className="btn btn--primary" onClick={interrupt}>
-                  Skip
-                </button>
-              )}
-              <button type="button" className="btn btn--secondary" onClick={endVoice}>
-                End
-              </button>
-            </div>
-          </div>
-        ) : (
-          <form
-            className="ask__form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void submit(question);
-            }}
-          >
-            <input
-              className="input"
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder={state === "idle" ? `e.g. Did ${recipientName} take the 8 pm tablet?` : "Ask a follow-up…"}
-              aria-label="Your question"
-              enterKeyHint="send"
-            />
-            <button className="btn btn--primary" disabled={state === "streaming" || !question.trim()}>
-              Ask
-            </button>
-          </form>
+        {voiceSupported && (
+          <button type="button" className="talk" onClick={() => void startVoice()} disabled={state === "streaming"}>
+            <span className="orb orb--mini" aria-hidden>
+              <span className="orb__glow" />
+              <span className="orb__core" />
+              <span className="orb__shine" />
+            </span>
+            <span className="talk__text">
+              <strong>Talk to CareCircle</strong>
+              <small>Ask out loud, hands-free</small>
+            </span>
+          </button>
         )}
+
+        <form
+          className="ask__form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit(question);
+          }}
+        >
+          <input
+            className="input"
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder={state === "idle" ? "Or type a question…" : "Ask a follow-up…"}
+            aria-label="Your question"
+            enterKeyHint="send"
+          />
+          <button className="btn btn--primary" disabled={state === "streaming" || !question.trim()}>
+            Ask
+          </button>
+        </form>
         {voiceNote && <p className="error voice__note">{voiceNote}</p>}
 
         {state === "idle" ? (
@@ -356,6 +328,19 @@ export function AskBox({ recipientName }: Props) {
           </>
         )}
       </div>
+
+      {voiceOn && (
+        <VoiceOverlay
+          state={voice}
+          level={level}
+          question={asked}
+          answer={answer}
+          recipientName={recipientName}
+          onEnd={endVoice}
+          onSkip={interrupt}
+          onDoneTalking={() => finishTalkingRef.current?.abort()}
+        />
+      )}
     </section>
   );
 }
