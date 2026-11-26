@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, ask } from "../api";
+import { api, ask, type Turn } from "../api";
 
 interface Props {
   recipientName: string;
@@ -20,6 +20,9 @@ const SpeechRecognitionImpl: (new () => SpeechRecognitionLike) | undefined =
 
 type State = "idle" | "streaming" | "done" | "error";
 
+// How many earlier turns to send. Enough for follow-ups, small enough to keep prompts short.
+const MAX_HISTORY = 6;
+
 export function AskBox({ recipientName }: Props) {
   const [question, setQuestion] = useState("");
   const [asked, setAsked] = useState("");
@@ -29,6 +32,9 @@ export function AskBox({ recipientName }: Props) {
   const [interactionId, setInteractionId] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<boolean | null>(null);
   const [listening, setListening] = useState(false);
+  // Finished turns of this conversation, oldest first (the current one is not in here yet).
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const answerRef = useRef("");
   const abortRef = useRef<AbortController | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
@@ -42,6 +48,11 @@ export function AskBox({ recipientName }: Props) {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    // The answer on screen becomes part of the history this question is asked with.
+    const history =
+      state === "done" && asked ? [...turns, { question: asked, answer: answerRef.current }].slice(-MAX_HISTORY) : turns;
+    setTurns(history);
+    answerRef.current = "";
     setAsked(text);
     setQuestion("");
     setAnswer("");
@@ -52,9 +63,13 @@ export function AskBox({ recipientName }: Props) {
     try {
       await ask(
         text,
+        history,
         {
           onMeta: (m) => setInteractionId(m.interaction_id),
-          onToken: (t) => setAnswer((a) => a + t),
+          onToken: (t) => {
+            answerRef.current += t;
+            setAnswer(answerRef.current);
+          },
           onDone: (d) => {
             setLatency(d.latency_ms);
             setState("done");
@@ -91,6 +106,15 @@ export function AskBox({ recipientName }: Props) {
     rec.start();
   }
 
+  function startOver() {
+    abortRef.current?.abort();
+    setTurns([]);
+    setAsked("");
+    setAnswer("");
+    answerRef.current = "";
+    setState("idle");
+  }
+
   async function rate(helpful: boolean) {
     if (interactionId == null) return;
     setFeedback(helpful);
@@ -116,7 +140,13 @@ export function AskBox({ recipientName }: Props) {
           className="input"
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          placeholder={listening ? "Listening…" : `e.g. Did ${recipientName} take the 8 pm tablet?`}
+          placeholder={
+            listening
+              ? "Listening…"
+              : state === "idle"
+                ? `e.g. Did ${recipientName} take the 8 pm tablet?`
+                : "Ask a follow-up…"
+          }
           aria-label="Your question"
           enterKeyHint="send"
         />
@@ -144,39 +174,56 @@ export function AskBox({ recipientName }: Props) {
           ))}
         </div>
       ) : (
-        <figure className={`answer answer--${state}`}>
-          <blockquote className="answer__q">“{asked}”</blockquote>
-          <p className="answer__text" aria-live="polite" aria-busy={state === "streaming"}>
-            {answer ? (
-              <>
-                {answer}
-                {state === "streaming" && <span className="caret" aria-hidden />}
-              </>
-            ) : (
-              <span className="thinking">Reading today's list</span>
-            )}
-          </p>
-          {state === "done" && (
-            <figcaption className="answer__foot">
-              <span className="label num">{latency != null && `Answered in ${(latency / 1000).toFixed(1)} s`}</span>
-              <span className="rate">
-                {feedback == null ? (
-                  <>
-                    Helpful?
-                    <button className="btn btn--text" onClick={() => void rate(true)}>
-                      Yes
-                    </button>
-                    <button className="btn btn--text" onClick={() => void rate(false)}>
-                      No
-                    </button>
-                  </>
-                ) : (
-                  "Thanks for the feedback"
-                )}
-              </span>
-            </figcaption>
+        <>
+          {turns.length > 0 && (
+            <ol className="thread" aria-label="Earlier in this conversation">
+              {turns.map((t, i) => (
+                <li key={i} className="thread__turn">
+                  <p className="answer__q">“{t.question}”</p>
+                  <p className="thread__a">{t.answer}</p>
+                </li>
+              ))}
+            </ol>
           )}
-        </figure>
+          <figure className={`answer answer--${state}`}>
+            <blockquote className="answer__q">“{asked}”</blockquote>
+            <p className="answer__text" aria-live="polite" aria-busy={state === "streaming"}>
+              {answer ? (
+                <>
+                  {answer}
+                  {state === "streaming" && <span className="caret" aria-hidden />}
+                </>
+              ) : (
+                <span className="thinking">Reading today's list</span>
+              )}
+            </p>
+            {state === "done" && (
+              <figcaption className="answer__foot">
+                <span className="label num">{latency != null && `Answered in ${(latency / 1000).toFixed(1)} s`}</span>
+                <span className="rate">
+                  {feedback == null ? (
+                    <>
+                      Helpful?
+                      <button className="btn btn--text" onClick={() => void rate(true)}>
+                        Yes
+                      </button>
+                      <button className="btn btn--text" onClick={() => void rate(false)}>
+                        No
+                      </button>
+                    </>
+                  ) : (
+                    "Thanks for the feedback"
+                  )}
+                </span>
+              </figcaption>
+            )}
+          </figure>
+          {state !== "streaming" && (
+            <button type="button" className="btn btn--text start-over" onClick={startOver}>
+              Start over
+            </button>
+          )}
+        </>
       )}
     </section>
   );

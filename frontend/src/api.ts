@@ -39,6 +39,12 @@ export const api = {
     request<void>(`/api/assistant/interactions/${interactionId}/feedback`, post({ helpful })),
 };
 
+/** An earlier question and answer, sent along so follow-ups ("did she take it?") make sense. */
+export interface Turn {
+  question: string;
+  answer: string;
+}
+
 export interface AskHandlers {
   onMeta?: (meta: { interaction_id: number; provider: string }) => void;
   onToken: (text: string) => void;
@@ -53,11 +59,12 @@ export interface AskHandlers {
  */
 export async function ask(
   question: string,
+  history: Turn[],
   handlers: AskHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
   const res = await fetch("/api/assistant/ask", {
-    ...post({ question }),
+    ...post({ question, history }),
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
     signal,
   });
