@@ -158,9 +158,11 @@ export function AskBox({ recipientName }: Props) {
     setVoiceNote(null);
     setVoice("starting");
     try {
-      const config = (configRef.current ??= await api
+      // Asked every time voice mode starts: it also warms up the server's voice connection.
+      const config = await api
         .voiceConfig()
-        .catch((): VoiceConfig => ({ stt: "browser", tts: "browser" })));
+        .catch((): VoiceConfig => configRef.current ?? { stt: "browser", tts: "browser" });
+      configRef.current = config;
       if (config.stt === "browser" && !canRecognizeInBrowser) config.stt = "server";
 
       let quiet = 0;
