@@ -1,3 +1,4 @@
+import { CalendarDays, Check, CircleAlert, HeartHandshake, Info, PartyPopper, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "./api";
 import { AddTask } from "./components/AddTask";
@@ -14,6 +15,41 @@ interface Toast {
   text: string;
   tone: "ok" | "info" | "error";
   undo?: () => void;
+}
+
+function greeting(timeZone: string): string {
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", hour12: false }).format(new Date()));
+  return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+}
+
+function ProgressRing({ done, total }: { done: number; total: number }) {
+  const r = 38;
+  const c = 2 * Math.PI * r;
+  const pct = total ? done / total : 0;
+  return (
+    <div className="ring" role="img" aria-label={`${done} of ${total} tasks done`}>
+      <svg width="92" height="92" viewBox="0 0 92 92">
+        <circle className="ring__track" cx="46" cy="46" r={r} fill="none" strokeWidth="8" />
+        <circle
+          className="ring__bar"
+          cx="46"
+          cy="46"
+          r={r}
+          fill="none"
+          strokeWidth="8"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - pct)}
+        />
+      </svg>
+      <div className="ring__label" aria-hidden>
+        <strong>
+          {done}/{total}
+        </strong>
+        <span>done</span>
+      </div>
+    </div>
+  );
 }
 
 export default function App() {
@@ -95,7 +131,7 @@ export default function App() {
         // Someone else got there first; tell them who, don't treat it as an error.
         const winner = (err.body as { task?: Task })?.task;
         const by = winner?.completed_by?.name ?? "Someone";
-        const at = winner?.completed_at && today ? ` at ${fmtTime(winner.completed_at, today.timezone)}` : "";
+        const at = winner?.completed_at ? ` at ${fmtTime(winner.completed_at, today.timezone)}` : "";
         showToast({ text: `${by} already did this${at}.`, tone: "info" });
       } else {
         showToast({ text: "Couldn't save. Please try again.", tone: "error" });
@@ -128,7 +164,17 @@ export default function App() {
   if (!recipient || !today) {
     return (
       <main className="loading">
-        {offline ? "Can't reach CareCircle. Is the server running?" : "Loading…"}
+        {offline ? (
+          <>
+            <WifiOff size={36} />
+            Can't reach CareCircle. Is the server running?
+          </>
+        ) : (
+          <>
+            <div className="spinner" />
+            Loading today…
+          </>
+        )}
       </main>
     );
   }
@@ -147,91 +193,141 @@ export default function App() {
   }
 
   const tz = today.timezone;
-  const sections = [
-    { key: "overdue", title: "Overdue", tasks: today.overdue, empty: "Nothing overdue." },
-    { key: "due", title: "Still to do today", tasks: today.due, empty: "Nothing else due today." },
-    { key: "done", title: "Done", tasks: today.done, empty: "Nothing marked done yet." },
-  ] as const;
+  const total = today.overdue.length + today.due.length + today.done.length;
+  const allDone = total > 0 && today.overdue.length === 0 && today.due.length === 0;
 
-  const renderSection = (s: (typeof sections)[number]) => (
-    <section key={s.key} id={s.key} className={`section section--${s.key}`}>
-      <h2 className="section__title">
-        {s.title} <span className="count">{s.tasks.length}</span>
-      </h2>
-      {s.tasks.length === 0 ? (
-        <p className="empty">{s.empty}</p>
-      ) : (
-        <ul className="list">
-          {s.tasks.map((t) => (
-            <TaskCard
-              key={t.id}
-              task={t}
-              tone={s.key}
-              timeZone={tz}
-              today={today.date}
-              now={now}
-              busy={busy.has(t.id)}
-              onDone={markDone}
-              onUndo={undo}
-            />
-          ))}
-        </ul>
-      )}
-    </section>
-  );
+  const sections = {
+    overdue: { title: "Needs attention", hint: "Late — please check", tasks: today.overdue, empty: "" },
+    due: { title: "Coming up today", hint: "Soonest first", tasks: today.due, empty: "Nothing else due today." },
+    done: { title: "Done today", hint: "Latest first", tasks: today.done, empty: "Nothing marked done yet." },
+  } as const;
+
+  const renderSection = (key: keyof typeof sections) => {
+    const s = sections[key];
+    return (
+      <section key={key} id={key} className={`section section--${key}`}>
+        <div className="section__head">
+          <h2 className="section__title">
+            {key === "overdue" && <CircleAlert size={22} strokeWidth={2.6} />}
+            {s.title} <span className="count">{s.tasks.length}</span>
+          </h2>
+          {s.tasks.length > 1 && <span className="section__hint">{s.hint}</span>}
+        </div>
+        {s.tasks.length === 0 ? (
+          <p className="empty">
+            {key === "due" && allDone ? (
+              <>
+                <PartyPopper size={22} /> All done for today. Lovely work.
+              </>
+            ) : (
+              s.empty
+            )}
+          </p>
+        ) : (
+          <ul className="list">
+            {s.tasks.map((t) => (
+              <TaskCard
+                key={t.id}
+                task={t}
+                tone={key}
+                timeZone={tz}
+                today={today.date}
+                now={now}
+                busy={busy.has(t.id)}
+                onDone={markDone}
+                onUndo={undo}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
+    );
+  };
+
+  const ToastIcon = toast?.tone === "ok" ? Check : toast?.tone === "info" ? Info : CircleAlert;
 
   return (
     <div className="app">
-      <header className="header">
-        <div>
-          <h1>{recipient.display_name}'s day</h1>
-          <p className="header__date">{fmtDay(today.date)}</p>
+      <header className="hero">
+        <div className="hero__top">
+          <span className="brand">
+            <span className="brand__mark" aria-hidden>
+              <HeartHandshake size={20} />
+            </span>
+            CareCircle
+          </span>
+          <button
+            className="me"
+            onClick={() => {
+              localStorage.removeItem(MEMBER_KEY);
+              setMember(null);
+            }}
+            aria-label={`You are ${member.name}. Switch person`}
+          >
+            <span className="avatar" aria-hidden>{member.name[0]}</span>
+            {member.name} · Switch
+          </button>
         </div>
-        <button
-          className="btn btn--ghost header__me"
-          onClick={() => {
-            localStorage.removeItem(MEMBER_KEY);
-            setMember(null);
-          }}
-          aria-label={`You are ${member.name}. Switch person`}
-        >
-          <span className="avatar avatar--small" aria-hidden>{member.name[0]}</span>
-          {member.name} · switch
-        </button>
-      </header>
 
-      <nav className="summary" aria-label="Summary">
-        <a href="#overdue" className={`summary__item summary__item--overdue ${today.overdue.length ? "" : "is-zero"}`}>
-          <strong>{today.overdue.length}</strong> overdue
-        </a>
-        <a href="#due" className="summary__item summary__item--due">
-          <strong>{today.due.length}</strong> to do
-        </a>
-        <a href="#done" className="summary__item summary__item--done">
-          <strong>{today.done.length}</strong> done
-        </a>
-      </nav>
+        <div className="hero__body">
+          <div>
+            <p className="hero__greeting">
+              {greeting(tz)}, {member.name}
+            </p>
+            <h1 className="hero__title">{recipient.display_name}'s day</h1>
+            <p className="hero__date">
+              <CalendarDays size={16} /> {fmtDay(today.date)}
+            </p>
+          </div>
+          <ProgressRing done={today.done.length} total={total} />
+        </div>
+
+        <nav className="stats" aria-label="Summary">
+          <a href="#overdue" className={`stat stat--overdue ${today.overdue.length ? "is-hot" : ""}`}>
+            <strong>
+              <i className="stat__dot" /> {today.overdue.length}
+            </strong>
+            <span>Overdue</span>
+          </a>
+          <a href="#due" className="stat stat--due">
+            <strong>
+              <i className="stat__dot" /> {today.due.length}
+            </strong>
+            <span>To do</span>
+          </a>
+          <a href="#done" className="stat stat--done">
+            <strong>
+              <i className="stat__dot" /> {today.done.length}
+            </strong>
+            <span>Done</span>
+          </a>
+        </nav>
+      </header>
 
       {offline && (
         <div className="banner" role="status">
-          Offline. Showing the list from {lastSync ? fmtTime(new Date(lastSync).toISOString(), tz) : "earlier"}.
+          <WifiOff size={18} />
+          Offline · showing the list from {lastSync ? fmtTime(new Date(lastSync).toISOString(), tz) : "earlier"}
         </div>
       )}
 
       <main>
         {/* Order = what a tired caregiver needs first: what's late, what's next, then the rest. */}
-        {today.overdue.length > 0 && renderSection(sections[0])}
-        {renderSection(sections[1])}
+        {today.overdue.length > 0 && renderSection("overdue")}
+        {renderSection("due")}
         <AddTask today={today.date} timeZone={tz} recipientName={recipient.display_name} onCreate={createTask} />
         <AskBox memberId={member.id} recipientName={recipient.display_name} />
-        {renderSection(sections[2])}
+        {renderSection("done")}
       </main>
 
       {toast && (
         <div className={`toast toast--${toast.tone}`} role="status" aria-live="polite">
-          <span>{toast.text}</span>
+          <span className="toast__icon" aria-hidden>
+            <ToastIcon size={18} strokeWidth={2.8} />
+          </span>
+          <span className="toast__text">{toast.text}</span>
           {toast.undo && (
-            <button className="btn btn--toast" onClick={toast.undo}>
+            <button className="btn toast__undo" onClick={toast.undo}>
               Undo
             </button>
           )}

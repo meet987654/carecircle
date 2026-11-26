@@ -1,13 +1,10 @@
+import { CircleAlert, Plus, Repeat, X } from "lucide-react";
 import { useState } from "react";
 import type { Category, NewTask } from "../types";
 import { nextQuarterHour } from "../time";
+import { CATEGORY_LABEL, CategoryIcon } from "./CategoryIcon";
 
-const CATEGORIES: { value: Category; label: string }[] = [
-  { value: "medicine", label: "💊 Medicine" },
-  { value: "appointment", label: "🩺 Appointment" },
-  { value: "call", label: "📞 Call" },
-  { value: "other", label: "📝 Other" },
-];
+const CATEGORIES: Category[] = ["medicine", "appointment", "call", "other"];
 
 const QUICK_TIMES = [
   { label: "8 am", value: "08:00" },
@@ -33,8 +30,11 @@ export function AddTask({ today, timeZone, recipientName, onCreate }: Props) {
 
   if (!open) {
     return (
-      <button className="btn btn--add" onClick={() => setOpen(true)}>
-        + Add a task
+      <button className="btn add-btn" onClick={() => setOpen(true)}>
+        <span className="add-btn__icon" aria-hidden>
+          <Plus size={20} strokeWidth={3} />
+        </span>
+        Add a task
       </button>
     );
   }
@@ -57,11 +57,23 @@ export function AddTask({ today, timeZone, recipientName, onCreate }: Props) {
   }
 
   return (
-    <form className="add" onSubmit={submit}>
-      <h2 className="section__title">New task for today</h2>
+    <form className="panel" onSubmit={submit}>
+      <div className="panel__head">
+        <div>
+          <h2 className="panel__title">
+            <span className="panel__icon" aria-hidden>
+              <Plus size={20} strokeWidth={2.6} />
+            </span>
+            New task
+          </h2>
+        </div>
+        <button type="button" className="btn btn--ghost icon-close" onClick={() => setOpen(false)} aria-label="Close">
+          <X size={20} />
+        </button>
+      </div>
 
       <label className="field">
-        <span>What needs doing?</span>
+        <span className="field__label">What needs doing?</span>
         <input
           className="input"
           value={title}
@@ -75,29 +87,30 @@ export function AddTask({ today, timeZone, recipientName, onCreate }: Props) {
 
       <fieldset className="field">
         <legend>Type</legend>
-        <div className="segmented">
+        <div className="tiles">
           {CATEGORIES.map((c) => (
             <button
               type="button"
-              key={c.value}
-              className={`segment ${category === c.value ? "segment--on" : ""}`}
-              aria-pressed={category === c.value}
-              onClick={() => setCategory(c.value)}
+              key={c}
+              className={`tile ${category === c ? "tile--on" : ""}`}
+              aria-pressed={category === c}
+              onClick={() => setCategory(c)}
             >
-              {c.label}
+              <CategoryIcon category={c} size={18} />
+              {CATEGORY_LABEL[c]}
             </button>
           ))}
         </div>
       </fieldset>
 
       <fieldset className="field">
-        <legend>Time ({recipientName}'s time)</legend>
-        <div className="segmented">
+        <legend>Time · {recipientName}'s time</legend>
+        <div className="times">
           {QUICK_TIMES.map((t) => (
             <button
               type="button"
               key={t.value}
-              className={`segment ${time === t.value ? "segment--on" : ""}`}
+              className={`time-chip ${time === t.value ? "time-chip--on" : ""}`}
               aria-pressed={time === t.value}
               onClick={() => setTime(t.value)}
             >
@@ -115,14 +128,24 @@ export function AddTask({ today, timeZone, recipientName, onCreate }: Props) {
         </div>
       </fieldset>
 
-      <label className="check">
-        <input type="checkbox" checked={daily} onChange={(e) => setDaily(e.target.checked)} />
-        <span>Repeat every day</span>
+      <label className="switch">
+        <span className="switch__text">
+          <Repeat size={20} aria-hidden />
+          <span>
+            Repeat every day
+            <small>For daily medicines and calls</small>
+          </span>
+        </span>
+        <input type="checkbox" role="switch" checked={daily} onChange={(e) => setDaily(e.target.checked)} />
       </label>
 
-      {error && <p className="error">{error}</p>}
+      {error && (
+        <p className="error">
+          <CircleAlert size={18} /> {error}
+        </p>
+      )}
 
-      <div className="add__actions">
+      <div className="form-actions">
         <button type="button" className="btn btn--ghost" onClick={() => setOpen(false)}>
           Cancel
         </button>

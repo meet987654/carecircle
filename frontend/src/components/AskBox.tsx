@@ -1,3 +1,4 @@
+import { ArrowUp, Mic, MicOff, Sparkles, ThumbsDown, ThumbsUp, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, ask } from "../api";
 
@@ -23,6 +24,7 @@ type State = "idle" | "streaming" | "done" | "error";
 
 export function AskBox({ memberId, recipientName }: Props) {
   const [question, setQuestion] = useState("");
+  const [asked, setAsked] = useState("");
   const [answer, setAnswer] = useState("");
   const [state, setState] = useState<State>("idle");
   const [latency, setLatency] = useState<number | null>(null);
@@ -34,11 +36,7 @@ export function AskBox({ memberId, recipientName }: Props) {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const suggestions = [
-    "What's still pending?",
-    `Has ${recipientName} had the medicines?`,
-    "What happened today?",
-  ];
+  const suggestions = ["What's still pending?", `Has ${recipientName} had the medicines?`, "Who did what today?"];
 
   async function submit(q: string) {
     const text = q.trim();
@@ -46,7 +44,8 @@ export function AskBox({ memberId, recipientName }: Props) {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    setQuestion(text);
+    setAsked(text);
+    setQuestion("");
     setAnswer("");
     setLatency(null);
     setFeedback(null);
@@ -87,11 +86,7 @@ export function AskBox({ memberId, recipientName }: Props) {
     const rec = new SpeechRecognitionImpl();
     rec.lang = "en-IN";
     rec.interimResults = false;
-    rec.onresult = (e) => {
-      const heard = e.results[0][0].transcript;
-      setQuestion(heard);
-      void submit(heard);
-    };
+    rec.onresult = (e) => void submit(e.results[0][0].transcript);
     rec.onend = () => setListening(false);
     rec.onerror = () => setListening(false);
     recognitionRef.current = rec;
@@ -106,40 +101,54 @@ export function AskBox({ memberId, recipientName }: Props) {
   }
 
   return (
-    <section className="ask" aria-labelledby="ask-title">
-      <h2 id="ask-title" className="section__title">Ask about today</h2>
+    <section className="panel ask" aria-labelledby="ask-title">
+      <div className="panel__head">
+        <div>
+          <h2 id="ask-title" className="panel__title">
+            <span className="panel__icon" aria-hidden>
+              <Sparkles size={20} strokeWidth={2.4} />
+            </span>
+            Ask about today
+          </h2>
+          <p className="panel__sub">Answers come only from today's list.</p>
+        </div>
+      </div>
+
       <form
-        className="ask__form"
+        className="ask__bar"
         onSubmit={(e) => {
           e.preventDefault();
           void submit(question);
         }}
       >
         <input
-          className="input"
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          placeholder={`e.g. Did ${recipientName} take the 8 pm tablet?`}
+          placeholder={listening ? "Listening…" : `Did ${recipientName} take the 8 pm tablet?`}
           aria-label="Your question"
           enterKeyHint="send"
         />
         {SpeechRecognitionImpl && (
           <button
             type="button"
-            className={`btn btn--icon ${listening ? "btn--listening" : ""}`}
+            className={`btn round-btn round-btn--mic ${listening ? "round-btn--live" : ""}`}
             onClick={toggleVoice}
             aria-label={listening ? "Stop listening" : "Ask by voice"}
             aria-pressed={listening}
           >
-            🎤
+            {listening ? <MicOff size={20} /> : <Mic size={20} />}
           </button>
         )}
-        <button className="btn btn--primary" disabled={state === "streaming" || !question.trim()}>
-          Ask
+        <button
+          className="btn btn--primary round-btn"
+          disabled={state === "streaming" || !question.trim()}
+          aria-label="Ask"
+        >
+          <ArrowUp size={22} strokeWidth={2.6} />
         </button>
       </form>
 
-      {state === "idle" && (
+      {state === "idle" ? (
         <div className="chips">
           {suggestions.map((s) => (
             <button key={s} type="button" className="chip" onClick={() => void submit(s)}>
@@ -147,29 +156,49 @@ export function AskBox({ memberId, recipientName }: Props) {
             </button>
           ))}
         </div>
-      )}
-
-      {state !== "idle" && (
-        <div className={`answer answer--${state}`} aria-live="polite" aria-busy={state === "streaming"}>
-          <p>
-            {answer}
-            {state === "streaming" && <span className="caret" aria-hidden />}
-          </p>
-          {state === "done" && (
-            <div className="answer__foot">
-              <span className="muted">From today's list{latency != null && ` · ${(latency / 1000).toFixed(1)} s`}</span>
-              <span className="answer__rate">
-                {feedback == null ? (
-                  <>
-                    <button className="btn btn--ghost btn--small" onClick={() => void rate(true)} aria-label="Helpful">👍</button>
-                    <button className="btn btn--ghost btn--small" onClick={() => void rate(false)} aria-label="Not helpful">👎</button>
-                  </>
-                ) : (
-                  <span className="muted">Thanks</span>
-                )}
-              </span>
+      ) : (
+        <div className={`answer answer--${state}`}>
+          <span className="answer__avatar" aria-hidden>
+            <Sparkles size={18} />
+          </span>
+          <div>
+            <p className="answer__q">“{asked}”</p>
+            <div className="answer__bubble" aria-live="polite" aria-busy={state === "streaming"}>
+              {answer ? (
+                <>
+                  {answer}
+                  {state === "streaming" && <span className="caret" aria-hidden />}
+                </>
+              ) : (
+                <span className="typing" aria-label="Thinking">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+              )}
             </div>
-          )}
+            {state === "done" && (
+              <div className="answer__foot">
+                <span>
+                  <Zap size={14} /> {latency != null ? `${(latency / 1000).toFixed(1)} s` : ""}
+                </span>
+                <span className="rate">
+                  {feedback == null ? (
+                    <>
+                      <button className="btn btn--ghost" onClick={() => void rate(true)} aria-label="Helpful">
+                        <ThumbsUp size={17} />
+                      </button>
+                      <button className="btn btn--ghost" onClick={() => void rate(false)} aria-label="Not helpful">
+                        <ThumbsDown size={17} />
+                      </button>
+                    </>
+                  ) : (
+                    <span>Thanks for the feedback</span>
+                  )}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </section>
