@@ -58,14 +58,14 @@ async def transcribe(
     return TranscriptOut(text=text, ms=ms)
 
 
-@router.post("/speak", responses={200: {"content": {"audio/wav": {}}}})
+@router.post("/speak", responses={200: {"content": {"audio/mpeg": {}}}})
 async def speak(body: SpeakRequest, _: CareRecipient = Depends(current_recipient)):
     """One sentence of the answer as audio (only when a server voice is configured)."""
     try:
-        audio = await voice.synthesize(get_settings(), body.text)
+        audio, media_type = await voice.synthesize(get_settings(), body.text)
     except voice.VoiceUnavailable as exc:
         raise HTTPException(503, str(exc)) from exc
     except httpx.HTTPError as exc:
         log.warning("speech synthesis failed: %r", exc)
         raise HTTPException(502, "Couldn't speak that") from exc
-    return Response(audio, media_type="audio/wav", headers={"Cache-Control": "no-store"})
+    return Response(audio, media_type=media_type, headers={"Cache-Control": "no-store"})

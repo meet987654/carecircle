@@ -27,10 +27,12 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.groq.com/openai/v1}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-qwen/qwen3.8-27b}
-      # Voice agent: Whisper speech-to-text uses the same key. TTS_MODEL empty = browser voice.
+      # Voice agent: Whisper speech-to-text uses the same key as the LLM.
       STT_MODEL: ${STT_MODEL:-whisper-large-v3-turbo}
-      TTS_MODEL: ${TTS_MODEL:-}
-      TTS_VOICE: ${TTS_VOICE:-hannah}
+      # Who speaks answers: browser (default) or deepgram (Aura voices, needs DEEPGRAM_API_KEY).
+      TTS_PROVIDER: ${TTS_PROVIDER:-browser}
+      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY:-}
+      TTS_VOICE: ${TTS_VOICE:-aura-2-thalia-en}
     depends_on:
       db:
         condition: service_healthy

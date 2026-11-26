@@ -135,7 +135,7 @@ def test_ask_falls_back_to_template_when_llm_is_down(client, monkeypatch):
 
 def test_follow_up_question_uses_the_conversation_and_is_logged(client):
     make_task(client, "BP tablet", NOW() - timedelta(hours=2))
-    make_task(client, "Physio call", NOW() + timedelta(hours=1))
+    make_task(client, "Physio call", NOW() + timedelta(hours=1), category="call")
     history = [{"question": "Any medicine for Mum today?", "answer": "The BP tablet is 2 h late."}]
 
     with client.stream("POST", "/api/assistant/ask", json={"question": "Did she take it?", "history": history}) as r:
@@ -185,3 +185,34 @@ def test_voice_without_a_key_tells_the_browser_to_use_its_own(client, monkeypatc
     assert client.get("/api/voice/config").json() == {"stt": "browser", "tts": "browser"}
     r = client.post("/api/voice/transcribe", content=b"abc", headers={"Content-Type": "audio/webm"})
     assert r.status_code == 503
+
+
+def test_deepgram_voice_request_and_speak_endpoint(client, monkeypatch):
+    import asyncio
+
+    import httpx
+
+    from app.routers import voice as router
+    from app.services import voice
+
+    sent = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.update(url=str(request.url), auth=request.headers["authorization"], body=json.loads(request.content))
+        return httpx.Response(200, content=b"ID3mp3", headers={"content-type": "audio/mpeg"})
+
+    settings = Settings(tts_provider="deepgram", deepgram_api_key="dg-key")
+    audio, media_type = asyncio.run(voice.synthesize(settings, "Ravi gave the tablet.", httpx.MockTransport(handler)))
+    assert (audio, media_type) == (b"ID3mp3", "audio/mpeg")
+    assert sent["url"].startswith("https://api.deepgram.com/v1/speak?model=aura-2-thalia-en&encoding=mp3")
+    assert sent["auth"] == "Token dg-key" and sent["body"] == {"text": "Ravi gave the tablet."}
+
+    # Through the API: config says the server speaks, and /speak returns the audio.
+    async def fake_synthesize(s, text):
+        return b"ID3mp3", "audio/mpeg"
+
+    monkeypatch.setattr(router, "get_settings", lambda: settings)
+    monkeypatch.setattr(voice, "synthesize", fake_synthesize)
+    assert client.get("/api/voice/config").json()["tts"] == "server"
+    r = client.post("/api/voice/speak", json={"text": "Hello"})
+    assert r.status_code == 200 and r.headers["content-type"] == "audio/mpeg" and r.content == b"ID3mp3"

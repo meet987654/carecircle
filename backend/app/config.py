@@ -23,10 +23,12 @@ class Settings(BaseSettings):
     # Voice agent. Speech-to-text runs on the same OpenAI-compatible endpoint/key
     # (Groq Whisper); without a key the browser's own recognition is used.
     stt_model: str = "whisper-large-v3-turbo"
-    # Server voice is optional: empty means the browser speaks the answer.
-    # Groq's Orpheus voice needs its terms accepted once in the Groq console.
-    tts_model: str = ""
-    tts_voice: str = "hannah"
+    # Who speaks the answer: "browser" (free, instant, default) or "deepgram"
+    # (Aura neural voices; free credit at console.deepgram.com, no card).
+    tts_provider: str = "browser"
+    deepgram_api_key: str = ""
+    deepgram_base_url: str = "https://api.deepgram.com/v1"
+    tts_voice: str = "aura-2-thalia-en"
 
     # Signs session tokens. Set a long random value in any real deployment.
     auth_secret: str = "dev-only-change-me"
