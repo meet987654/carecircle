@@ -245,8 +245,9 @@ class OpenAICompatibleProvider:
             "messages": self.messages(question, context),
             "stream": True,
             "temperature": 0.2,
-            "max_tokens": 200,
+            "max_tokens": 300,
         }
+        produced = False
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             async with client.stream(
                 "POST", f"{self.base_url}/chat/completions", json=body, headers=headers
@@ -261,7 +262,11 @@ class OpenAICompatibleProvider:
                     choices = json.loads(data).get("choices") or [{}]
                     delta = choices[0].get("delta", {}).get("content")
                     if delta:
+                        produced = True
                         yield delta
+        if not produced:
+            # e.g. a reasoning model spent its whole budget thinking. Let the caller fall back.
+            raise RuntimeError(f"{self.model} returned no answer text")
 
 
 def get_provider(settings: Settings) -> TemplateProvider | OpenAICompatibleProvider:

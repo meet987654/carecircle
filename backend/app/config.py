@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     assistant_provider: str = "template"
     llm_base_url: str = "https://api.groq.com/openai/v1"
     llm_api_key: str = ""
-    llm_model: str = "llama-3.1-8b-instant"
+    llm_model: str = "qwen/qwen3.8-27b"
     llm_timeout_seconds: float = 20.0
 
     seed_demo_data: bool = True
