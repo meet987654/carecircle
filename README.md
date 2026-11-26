@@ -25,7 +25,7 @@ Sign in as one of them (the login screen lists the demo accounts, tap one), then
 | --- | --- |
 | `ravi@carecircle.demo`, `priya@carecircle.demo`, `anil@carecircle.demo` | `carecircle` |
 
-**Tests** (22, against a real Postgres):
+**Tests** (24, against a real Postgres):
 
 ```bash
 docker compose run --rm api pytest -v
@@ -61,7 +61,7 @@ before sending anything, the answer falls back to the template, and the log reco
   "Priya already did this at 8:04 pm" in the UI, plus a test that fires 8 simultaneous taps.
 - **Login:** email + password per family member. "Done by" is taken from the session, so nobody can
   record a dose in someone else's name (see below).
-- **Voice input:** a Speak button on the Ask box (Web Speech API; hidden on browsers without it).
+- **Voice agent:** tap **Talk** and have a spoken back-and-forth with the same assistant (see below).
 
 ## Design choices and why
 
@@ -104,6 +104,27 @@ system message. The template provider handles "did she take it?" by carrying ove
 question that had one (a task or a category), not its intent, so "who did it?" still answers who did it. The
 conversation is saved in the logged context, so a follow-up's answer can be understood later.
 
+**Voice agent: a simple cascaded pipeline, not a telephony stack.**
+`mic → speech-to-text → the same grounded assistant → text-to-speech → listen again`.
+- **Listening:** the browser records one question and ends it by itself after a 1.2 s pause. This uses a tiny
+  energy-based voice detector (RMS against a noise floor measured in the first 300 ms), with a "Done talking"
+  button as a backup.
+- **Speech-to-text:** Groq **Whisper** (`whisper-large-v3-turbo`, about 0.5 s) via `POST /api/voice/transcribe`,
+  using the same key as the LLM. It gets today's task titles and the family's names as a spelling hint, so
+  "Amlodipine" and "Priya" come out right. With no key, the browser's own recognizer is used instead.
+- **Answering:** the normal `/api/assistant/ask` SSE stream. Voice and text share one conversation, one
+  grounding and one fallback, and the log records `channel=voice` and `stt_ms`.
+- **Speaking:** the streamed answer is cut into sentences and each one is spoken as soon as it is complete, so
+  speech starts before the answer has finished. The browser's voice is used by default (free and instant;
+  Edge has natural voices). A server voice (Groq Orpheus) is an env flag away (`TTS_MODEL`).
+- **Turn-taking:** half-duplex on purpose. It never listens while speaking, so the phone can't hear its own
+  answer as a question. **Skip** interrupts it, it listens again for a follow-up after each answer, and it
+  stops after two silences.
+
+I skipped realtime frameworks (Pipecat, LiveKit Agents, the OpenAI Realtime API). They're built for full-duplex
+calls over WebRTC with barge-in. For short questions about today's list, a turn-by-turn pipeline over the
+existing endpoint was simpler, cheaper, and kept one grounded code path for text and voice.
+
 **SSE over POST, read with `fetch`**, rather than `EventSource` (GET-only) or WebSockets (two-way, which this
 doesn't need). nginx has `proxy_buffering off` so tokens aren't held back. The log row is written at the
 start (its id goes to the client for feedback) and finished in a `finally`, so errors and
@@ -141,9 +162,11 @@ old the list is.
    important thing the family needs to know.
 3. **Push notifications** when something becomes overdue, to whoever is on duty, plus live updates over SSE
    instead of polling.
-4. **Use the AI log**: a small review page, turning 👎 answers into regression cases for the template and the
+4. **Voice:** voice-activity detection in an AudioWorklet (or Silero VAD), barge-in with echo cancellation, and
+   streaming speech-to-text, so it can start thinking before you've finished the sentence.
+5. **Use the AI log**: a small review page, turning 👎 answers into regression cases for the template and the
    prompt, and an eval set run in CI.
-5. Alembic migrations, editing and pausing schedules from the UI, a weekly history view, an offline queue for taps.
+6. Alembic migrations, editing and pausing schedules from the UI, a weekly history view, an offline queue for taps.
 
 ## AI tools used
 - **Claude Code:** used throughout as a pair programmer for scaffolding, backend and frontend code, tests,
@@ -160,9 +183,11 @@ backend/app/
   services/today.py      "today" + overdue rules (pure, unit-tested)
   services/tasks.py      queries, daily schedules, atomic complete
   services/assistant.py  context builder, template answer, LLM provider
+  services/voice.py      speech-to-text / text-to-speech (Whisper, optional server voice)
   auth.py                password hashing, signed session tokens, current_member
   routers/               REST + SSE endpoints
 backend/tests/           pytest (pure logic + API against Postgres)
-frontend/src/            App, Login, TaskCard, AddTask, AskBox (SSE reader + voice)
+frontend/src/            App, Login, TaskCard, AddTask, AskBox (text + voice conversation)
+  voice.ts               recording with silence detection, sentence-by-sentence speaker
 docker-compose.yml       db + api + web (nginx)
 ```
