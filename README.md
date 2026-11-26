@@ -154,7 +154,8 @@ circle, title and right-aligned time (the iOS Reminders / Things pattern). It ha
 adding tasks, spring animations, and a full-screen voice mode in the style of Siri and ElevenLabs: one calm blue-to-aqua orb (three colours) that
 follows the microphone, swirls while thinking and breathes while speaking. 17px text, 44px+ tap targets, and every
 state shown in both colour and words ("2 h 10 min late", "Done by Ravi at 9:07 am"). Overdue comes first and only appears
-when non-empty. No menus or modals: the add form opens inline, and who you are (with sign out) is always visible.
+when non-empty. Asking is one slim row under the header (type, or tap **Talk**), with the conversation in a bottom
+sheet. That keeps the assistant easy to find without pushing overdue tasks off the first screen. No menus or modals: the add form opens inline, and who you are (with sign out) is always visible.
 Done is **optimistic** with a 7-second **Undo**, because mis-taps happen at 6 am. The list refreshes every 30 s
 and when the phone wakes, so you see what the others did. If the connection drops, a banner shows how
 old the list is.

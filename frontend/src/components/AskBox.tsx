@@ -42,6 +42,9 @@ export function AskBox({ recipientName }: Props) {
   const [voice, setVoice] = useState<VoiceState>("off");
   const [level, setLevel] = useState(0);
   const [voiceNote, setVoiceNote] = useState<string | null>(null);
+  // The conversation lives in a bottom sheet, opened from the ask row under the header.
+  const [open, setOpen] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   // The voice loop runs across many renders, so it reads the conversation from refs.
   const convo = useRef({ turns: [] as Turn[], asked: "", answer: "", state: "idle" as State });
@@ -189,6 +192,8 @@ export function AskBox({ recipientName }: Props) {
       speakerRef.current = null;
       setVoice("off");
       setLevel(0);
+      // Leave the conversation on screen so it can be read back.
+      if (convo.current.asked) setOpen(true);
     }
   }
 
@@ -221,113 +226,173 @@ export function AskBox({ recipientName }: Props) {
   }
 
   const voiceOn = voice !== "off";
+  const hasConversation = state !== "idle";
+
+  // Sheet behaves like a modal: lock page scroll; Escape closes it (unless voice mode owns Escape).
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !voiceRef.current && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  // Keep the newest words in view while an answer streams in.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [answer, turns.length, open]);
+
+  const talkButton = (compact: boolean) =>
+    voiceSupported && (
+      <button
+        type="button"
+        className={`talk ${compact ? "talk--compact" : ""}`}
+        onClick={() => void startVoice()}
+        disabled={state === "streaming"}
+        aria-label="Talk to CareCircle"
+      >
+        <span className={`orb ${compact ? "orb--xs" : "orb--mini"}`} aria-hidden>
+          <span className="orb__glow" />
+          <span className="orb__core" />
+          <span className="orb__shine" />
+        </span>
+        {compact ? (
+          <strong>Talk</strong>
+        ) : (
+          <span className="talk__text">
+            <strong>Talk to CareCircle</strong>
+            <small>Ask out loud, hands-free</small>
+          </span>
+        )}
+      </button>
+    );
 
   return (
-    <section className="section" aria-labelledby="ask-title">
-      <div className="section__head">
-        <h2 id="ask-title" className="section__title">
-          Ask about today
-        </h2>
+    <>
+      {/* One slim row near the top: the way in to typing or talking. */}
+      <div className="askbar">
+        <button type="button" className="askbar__field" onClick={() => setOpen(true)}>
+          <span className="askbar__text">
+            {hasConversation ? `Continue: ${asked}` : `Ask about ${recipientName}'s day…`}
+          </span>
+        </button>
+        {talkButton(true)}
       </div>
+      {voiceNote && <p className="error askbar__note">{voiceNote}</p>}
 
-      <div className="ask">
-        {voiceSupported && (
-          <button type="button" className="talk" onClick={() => void startVoice()} disabled={state === "streaming"}>
-            <span className="orb orb--mini" aria-hidden>
-              <span className="orb__glow" />
-              <span className="orb__core" />
-              <span className="orb__shine" />
-            </span>
-            <span className="talk__text">
-              <strong>Talk to CareCircle</strong>
-              <small>Ask out loud, hands-free</small>
-            </span>
-          </button>
-        )}
-
-        <form
-          className="ask__form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void submit(question);
-          }}
-        >
-          <input
-            className="input"
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder={state === "idle" ? "Or type a question…" : "Ask a follow-up…"}
-            aria-label="Your question"
-            enterKeyHint="send"
-          />
-          <button className="btn btn--primary" disabled={state === "streaming" || !question.trim()}>
-            Ask
-          </button>
-        </form>
-        {voiceNote && <p className="error voice__note">{voiceNote}</p>}
-
-        {state === "idle" ? (
-          <>
-            <div className="chips" aria-label="Suggested questions">
-              {suggestions.map((s) => (
-                <button key={s} type="button" className="chip" onClick={() => void submit(s)}>
-                  {s}
+      {open && (
+        <div className="backdrop" onClick={() => setOpen(false)}>
+          <div
+            className="sheet sheet--ask"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ask-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="sheet__grabber" aria-hidden />
+            <div className="sheet__bar">
+              <button type="button" className="link link--muted" onClick={() => setOpen(false)}>
+                Close
+              </button>
+              <h2 id="ask-title" className="sheet__title">
+                Ask about today
+              </h2>
+              {hasConversation && state !== "streaming" ? (
+                <button type="button" className="link link--muted sheet__end" onClick={startOver}>
+                  Clear
                 </button>
-              ))}
-            </div>
-            <p className="ask__note">Answers come only from today's list.</p>
-          </>
-        ) : (
-          <>
-            {turns.map((t, i) => (
-              <div key={i} className="qa qa--past">
-                <p className="qa__q">{t.question}</p>
-                <p className="qa__a">{t.answer}</p>
-              </div>
-            ))}
-            <figure className={`qa qa--${state}`}>
-              <blockquote className="qa__q">{asked}</blockquote>
-              <p className="qa__a" aria-live={voiceOn ? "off" : "polite"} aria-busy={state === "streaming"}>
-                {answer ? (
-                  <>
-                    {answer}
-                    {state === "streaming" && <span className="caret" aria-hidden />}
-                  </>
-                ) : (
-                  <span className="thinking">Checking today's list…</span>
-                )}
-              </p>
-              {state === "done" && (
-                <figcaption className="qa__foot">
-                  <span className="tnum">{latency != null && `${(latency / 1000).toFixed(1)} s`}</span>
-                  <span className="qa__rate">
-                    {feedback == null ? (
-                      <>
-                        Helpful?
-                        <button className="link" onClick={() => void rate(true)}>
-                          Yes
-                        </button>
-                        <button className="link" onClick={() => void rate(false)}>
-                          No
-                        </button>
-                      </>
-                    ) : (
-                      "Thanks for the feedback"
-                    )}
-                  </span>
-                </figcaption>
+              ) : (
+                <span className="sheet__spacer" aria-hidden />
               )}
-            </figure>
-            {state !== "streaming" && !voiceOn && (
-              <div className="qa__end">
-                <button type="button" className="link link--muted" onClick={startOver}>
-                  Clear conversation
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+            </div>
+
+            <div className="sheet__scroll" ref={scrollRef}>
+              {!hasConversation ? (
+                <>
+                  {talkButton(false)}
+                  <div className="chips" aria-label="Suggested questions">
+                    {suggestions.map((s) => (
+                      <button key={s} type="button" className="chip" onClick={() => void submit(s)}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="ask__note">Answers come only from today's list.</p>
+                </>
+              ) : (
+                <>
+                  {turns.map((t, i) => (
+                    <div key={i} className="qa qa--past">
+                      <p className="qa__q">{t.question}</p>
+                      <p className="qa__a">{t.answer}</p>
+                    </div>
+                  ))}
+                  <figure className={`qa qa--${state}`}>
+                    <blockquote className="qa__q">{asked}</blockquote>
+                    <p className="qa__a" aria-live={voiceOn ? "off" : "polite"} aria-busy={state === "streaming"}>
+                      {answer ? (
+                        <>
+                          {answer}
+                          {state === "streaming" && <span className="caret" aria-hidden />}
+                        </>
+                      ) : (
+                        <span className="thinking">Checking today's list…</span>
+                      )}
+                    </p>
+                    {state === "done" && (
+                      <figcaption className="qa__foot">
+                        <span className="tnum">{latency != null && `${(latency / 1000).toFixed(1)} s`}</span>
+                        <span className="qa__rate">
+                          {feedback == null ? (
+                            <>
+                              Helpful?
+                              <button className="link" onClick={() => void rate(true)}>
+                                Yes
+                              </button>
+                              <button className="link" onClick={() => void rate(false)}>
+                                No
+                              </button>
+                            </>
+                          ) : (
+                            "Thanks for the feedback"
+                          )}
+                        </span>
+                      </figcaption>
+                    )}
+                  </figure>
+                </>
+              )}
+            </div>
+
+            <form
+              className="sheet__footer ask__form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void submit(question);
+              }}
+            >
+              <input
+                className="input"
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                placeholder={hasConversation ? "Ask a follow-up…" : "Type a question…"}
+                aria-label="Your question"
+                enterKeyHint="send"
+                autoFocus={!hasConversation}
+              />
+              {hasConversation && talkButton(true)}
+              <button className="btn btn--primary" disabled={state === "streaming" || !question.trim()}>
+                Ask
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {voiceOn && (
         <VoiceOverlay
@@ -341,6 +406,6 @@ export function AskBox({ recipientName }: Props) {
           onDoneTalking={() => finishTalkingRef.current?.abort()}
         />
       )}
-    </section>
+    </>
   );
 }

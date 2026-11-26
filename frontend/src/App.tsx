@@ -253,6 +253,8 @@ export default function App() {
         </div>
       </section>
 
+      <AskBox recipientName={recipient.display_name} />
+
       {offline && (
         <div className="banner" role="status">
           You're offline. Showing the list from {lastSync ? fmtTime(new Date(lastSync).toISOString(), tz) : "earlier"}.
@@ -264,7 +266,6 @@ export default function App() {
         {today.overdue.length > 0 && renderSection("overdue")}
         {renderSection("due")}
         <AddTask today={today.date} timeZone={tz} recipientName={recipient.display_name} onCreate={createTask} />
-        <AskBox recipientName={recipient.display_name} />
         {renderSection("done")}
       </main>
 
