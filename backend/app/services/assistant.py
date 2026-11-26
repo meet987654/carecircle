@@ -77,29 +77,42 @@ def build_context(recipient: CareRecipient, groups: TodayGroups, now: datetime) 
 
 # ---------------------------------------------------------------- template answer
 
-TOPIC_WORDS: dict[str, tuple[str, ...]] = {
-    TaskCategory.medicine.value: (
-        "medicine", "medication", "meds", "tablet", "pill", "dose", "insulin", "bp",
-        "syrup", "drops", "injection",
-    ),
-    TaskCategory.appointment.value: (
-        "appointment", "doctor", "dr", "clinic", "hospital", "physio", "checkup", "visit",
-    ),
-    TaskCategory.call.value: ("call", "phone", "check-in", "checkin", "ring"),
-}
-TOPIC_LABEL = {"medicine": "medicines", "appointment": "appointments", "call": "calls"}
-REMAINING_WORDS = ("left", "pending", "remaining", "still", "missed", "overdue", "next", "due")
-DONE_WORDS = ("who", "done", "did", "given", "gave", "completed", "finished", "taken")
+def _stem(word: str) -> str:
+    """Crude plural folding so "tablets" matches "tablet". Good enough for short questions."""
+    return word[:-1] if len(word) > 3 and word.endswith("s") and not word.endswith("ss") else word
 
 
 def _words(text: str) -> set[str]:
-    return set(re.findall(r"[a-z][a-z\-]*", text.lower()))
+    return {_stem(w) for w in re.findall(r"[a-z][a-z\-]*", text.lower())}
+
+
+def _vocab(text: str) -> frozenset[str]:
+    return frozenset(_words(text))
+
+
+TOPIC_WORDS: dict[str, frozenset[str]] = {
+    TaskCategory.medicine.value: _vocab(
+        "medicine medication meds tablet pill dose insulin bp syrup drops injection"
+    ),
+    TaskCategory.appointment.value: _vocab(
+        "appointment doctor dr clinic hospital physio checkup visit"
+    ),
+    TaskCategory.call.value: _vocab("call phone check-in checkin ring"),
+}
+TOPIC_LABEL = {"medicine": "medicines", "appointment": "appointments", "call": "calls"}
+REMAINING_WORDS = _vocab("left pending remaining still missed overdue next due")
+DONE_WORDS = _vocab("who done did given gave completed finished taken")
+STOP_WORDS = _vocab(
+    "a an the is was has have had her his their mum mom dad papa today what when s any "
+    "anything get got of to for and or it does do she he they with on in am pm evening "
+    "morning night tonight about status how yet happened everything all"
+)
 
 
 def detect_topic(question: str) -> str | None:
     words = _words(question)
     for topic, keywords in TOPIC_WORDS.items():
-        if words & set(keywords):
+        if words & keywords:
             return topic
     return None
 
@@ -115,10 +128,17 @@ def compose_answer(question: str, context: dict) -> str:
     name = context["care_recipient"]
     topic = detect_topic(question)
     words = _words(question)
-    wants_remaining = bool(words & set(REMAINING_WORDS))
-    wants_done = bool(words & set(DONE_WORDS))
+    wants_remaining = bool(words & REMAINING_WORDS)
+    wants_done = bool(words & DONE_WORDS)
+
+    # Narrow to what was asked about: a named task ("BP tablet") beats a category ("medicines").
+    everything = context["overdue"] + context["due"] + context["done"]
+    named = words - STOP_WORDS - DONE_WORDS - REMAINING_WORDS
+    title_hits = [i for i in everything if named & _words(i["title"])]
 
     def pick(items: list[dict]) -> list[dict]:
+        if title_hits:
+            return [i for i in items if i in title_hits]
         return [i for i in items if topic is None or i["category"] == topic]
 
     overdue, due, done = pick(context["overdue"]), pick(context["due"]), pick(context["done"])
@@ -149,7 +169,7 @@ def compose_answer(question: str, context: dict) -> str:
         by_person: dict[str, list[str]] = {}
         for i in reversed(done):  # chronological order reads more naturally
             by_person.setdefault(i["done_by"], []).append(
-                f"the {i['due']} {i['title']} (at {i['done_at']})"
+                f"the {i['due']} {i['title']} at {i['done_at']}"
             )
         done_s = _join([f"{who} did {_join(items)}" for who, items in by_person.items()]) + "."
 
@@ -159,8 +179,9 @@ def compose_answer(question: str, context: dict) -> str:
     else:
         sentences = [pending_s, next_s, done_s]
 
+    narrowed = bool(title_hits) or topic is not None
     if not overdue and not due:
-        sentences.append("Everything is done for today.")
+        sentences.append("Nothing more of that is due today." if narrowed else "Everything is done for today.")
     elif not overdue and wants_remaining:
         sentences.insert(0, "Nothing is overdue.")
 

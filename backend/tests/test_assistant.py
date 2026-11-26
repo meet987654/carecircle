@@ -18,9 +18,12 @@ def at(hh, mm=0):
 def make_context(now=at(21, 0)):
     mum = CareRecipient(name="Kamala", display_name="Mum", timezone="Asia/Kolkata")
     ravi = FamilyMember(name="Ravi")
+    priya = FamilyMember(name="Priya")
     tasks = [
         CareTask(title="BP tablet", category=TaskCategory.medicine, due_at=at(9),
                  status=TaskStatus.done, completed_at=at(9, 5), completed_by=ravi),
+        CareTask(title="Metformin", category=TaskCategory.medicine, due_at=at(10),
+                 status=TaskStatus.done, completed_at=at(10, 2), completed_by=priya),
         CareTask(title="BP tablet", category=TaskCategory.medicine, due_at=at(20),
                  status=TaskStatus.pending),
         CareTask(title="Call with Dr. Mehta", category=TaskCategory.call, due_at=at(22),
@@ -37,9 +40,15 @@ def test_fmt_time():
 
 def test_answer_names_pending_dose_and_who_did_the_earlier_one():
     answer = compose_answer("Did Mum get her BP tablet?", make_context())
-    assert "8 pm BP tablet" in answer and "1 h late" in answer
-    assert "Ravi did the 9 am BP tablet (at 9:05 am)" in answer
-    assert "Call" not in answer  # filtered to the medicine topic
+    assert answer.startswith("Ravi did the 9 am BP tablet at 9:05 am.")
+    assert "8 pm BP tablet, 1 h late" in answer
+    assert "Metformin" not in answer and "Call" not in answer  # only what was asked about
+
+
+def test_category_question_covers_all_medicines():
+    answer = compose_answer("Has Mum had her medicines?", make_context())
+    assert "Ravi did the 9 am BP tablet" in answer and "Priya did the 10 am Metformin" in answer
+    assert "Call" not in answer
 
 
 def test_remaining_question_skips_done_items():
