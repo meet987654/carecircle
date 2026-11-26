@@ -1,8 +1,7 @@
-import { CircleAlert, Plus, Repeat, X } from "lucide-react";
 import { useState } from "react";
 import type { Category, NewTask } from "../types";
 import { nextQuarterHour } from "../time";
-import { CATEGORY_LABEL, CategoryIcon } from "./CategoryIcon";
+import { CATEGORY_LABEL } from "./TaskCard";
 
 const CATEGORIES: Category[] = ["medicine", "appointment", "call", "other"];
 
@@ -31,10 +30,8 @@ export function AddTask({ today, timeZone, recipientName, onCreate }: Props) {
   if (!open) {
     return (
       <button className="btn add-btn" onClick={() => setOpen(true)}>
-        <span className="add-btn__icon" aria-hidden>
-          <Plus size={20} strokeWidth={3} />
-        </span>
         Add a task
+        <span className="plus" aria-hidden>+</span>
       </button>
     );
   }
@@ -58,22 +55,12 @@ export function AddTask({ today, timeZone, recipientName, onCreate }: Props) {
 
   return (
     <form className="panel" onSubmit={submit}>
-      <div className="panel__head">
-        <div>
-          <h2 className="panel__title">
-            <span className="panel__icon" aria-hidden>
-              <Plus size={20} strokeWidth={2.6} />
-            </span>
-            New task
-          </h2>
-        </div>
-        <button type="button" className="btn btn--ghost icon-close" onClick={() => setOpen(false)} aria-label="Close">
-          <X size={20} />
-        </button>
-      </div>
+      <span className="label">New task</span>
+      <h2 className="panel__title display">What needs doing?</h2>
+      <p className="panel__sub">It will show up for everyone in the family.</p>
 
       <label className="field">
-        <span className="field__label">What needs doing?</span>
+        <span className="label">Task</span>
         <input
           className="input"
           value={title}
@@ -86,17 +73,16 @@ export function AddTask({ today, timeZone, recipientName, onCreate }: Props) {
       </label>
 
       <fieldset className="field">
-        <legend>Type</legend>
-        <div className="tiles">
+        <legend className="label">Type</legend>
+        <div className="options">
           {CATEGORIES.map((c) => (
             <button
               type="button"
               key={c}
-              className={`tile ${category === c ? "tile--on" : ""}`}
+              className={`option cat-${c}`}
               aria-pressed={category === c}
               onClick={() => setCategory(c)}
             >
-              <CategoryIcon category={c} size={18} />
               {CATEGORY_LABEL[c]}
             </button>
           ))}
@@ -104,13 +90,13 @@ export function AddTask({ today, timeZone, recipientName, onCreate }: Props) {
       </fieldset>
 
       <fieldset className="field">
-        <legend>Time · {recipientName}'s time</legend>
-        <div className="times">
+        <legend className="label">Time · {recipientName}'s clock</legend>
+        <div className="options">
           {QUICK_TIMES.map((t) => (
             <button
               type="button"
               key={t.value}
-              className={`time-chip ${time === t.value ? "time-chip--on" : ""}`}
+              className="option option--time"
               aria-pressed={time === t.value}
               onClick={() => setTime(t.value)}
             >
@@ -128,25 +114,18 @@ export function AddTask({ today, timeZone, recipientName, onCreate }: Props) {
         </div>
       </fieldset>
 
-      <label className="switch">
-        <span className="switch__text">
-          <Repeat size={20} aria-hidden />
-          <span>
-            Repeat every day
-            <small>For daily medicines and calls</small>
-          </span>
+      <label className="toggle">
+        <span>
+          <strong>Repeat every day</strong>
+          <small>For daily medicines and calls</small>
         </span>
         <input type="checkbox" role="switch" checked={daily} onChange={(e) => setDaily(e.target.checked)} />
       </label>
 
-      {error && (
-        <p className="error">
-          <CircleAlert size={18} /> {error}
-        </p>
-      )}
+      {error && <p className="error">{error}</p>}
 
       <div className="form-actions">
-        <button type="button" className="btn btn--ghost" onClick={() => setOpen(false)}>
+        <button type="button" className="btn btn--quiet" onClick={() => setOpen(false)}>
           Cancel
         </button>
         <button className="btn btn--primary" disabled={saving || !title.trim()}>

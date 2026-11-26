@@ -1,4 +1,3 @@
-import { CalendarDays, Check, CircleAlert, HeartHandshake, Info, PartyPopper, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "./api";
 import { AddTask } from "./components/AddTask";
@@ -20,36 +19,6 @@ interface Toast {
 function greeting(timeZone: string): string {
   const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", hour12: false }).format(new Date()));
   return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-}
-
-function ProgressRing({ done, total }: { done: number; total: number }) {
-  const r = 38;
-  const c = 2 * Math.PI * r;
-  const pct = total ? done / total : 0;
-  return (
-    <div className="ring" role="img" aria-label={`${done} of ${total} tasks done`}>
-      <svg width="92" height="92" viewBox="0 0 92 92">
-        <circle className="ring__track" cx="46" cy="46" r={r} fill="none" strokeWidth="8" />
-        <circle
-          className="ring__bar"
-          cx="46"
-          cy="46"
-          r={r}
-          fill="none"
-          strokeWidth="8"
-          strokeLinecap="round"
-          strokeDasharray={c}
-          strokeDashoffset={c * (1 - pct)}
-        />
-      </svg>
-      <div className="ring__label" aria-hidden>
-        <strong>
-          {done}/{total}
-        </strong>
-        <span>done</span>
-      </div>
-    </div>
-  );
 }
 
 export default function App() {
@@ -164,17 +133,10 @@ export default function App() {
   if (!recipient || !today) {
     return (
       <main className="loading">
-        {offline ? (
-          <>
-            <WifiOff size={36} />
-            Can't reach CareCircle. Is the server running?
-          </>
-        ) : (
-          <>
-            <div className="spinner" />
-            Loading today…
-          </>
-        )}
+        <span className="wordmark">
+          Care<b>Circle</b>
+        </span>
+        <p>{offline ? "Can't reach the server. Is it running?" : "Loading today…"}</p>
       </main>
     );
   }
@@ -195,11 +157,12 @@ export default function App() {
   const tz = today.timezone;
   const total = today.overdue.length + today.due.length + today.done.length;
   const allDone = total > 0 && today.overdue.length === 0 && today.due.length === 0;
+  const next = today.due[0];
 
   const sections = {
-    overdue: { title: "Needs attention", hint: "Late — please check", tasks: today.overdue, empty: "" },
-    due: { title: "Coming up today", hint: "Soonest first", tasks: today.due, empty: "Nothing else due today." },
-    done: { title: "Done today", hint: "Latest first", tasks: today.done, empty: "Nothing marked done yet." },
+    overdue: { title: "Needs attention", tasks: today.overdue, empty: "" },
+    due: { title: "Coming up", tasks: today.due, empty: "Nothing else due today." },
+    done: { title: "Done today", tasks: today.done, empty: "Nothing marked done yet." },
   } as const;
 
   const renderSection = (key: keyof typeof sections) => {
@@ -207,22 +170,18 @@ export default function App() {
     return (
       <section key={key} id={key} className={`section section--${key}`}>
         <div className="section__head">
-          <h2 className="section__title">
-            {key === "overdue" && <CircleAlert size={22} strokeWidth={2.6} />}
-            {s.title} <span className="count">{s.tasks.length}</span>
+          <h2 className="section__title display">
+            {s.title}
+            <span className="count num">{s.tasks.length}</span>
           </h2>
-          {s.tasks.length > 1 && <span className="section__hint">{s.hint}</span>}
+          {s.tasks.length > 1 && <span className="label">{key === "done" ? "Latest first" : "Soonest first"}</span>}
         </div>
         {s.tasks.length === 0 ? (
-          <p className="empty">
-            {key === "due" && allDone ? (
-              <>
-                <PartyPopper size={22} /> All done for today. Lovely work.
-              </>
-            ) : (
-              s.empty
-            )}
-          </p>
+          key === "due" && allDone ? (
+            <p className="empty empty--celebrate">All done for today. Lovely work.</p>
+          ) : (
+            <p className="empty">{s.empty}</p>
+          )
         ) : (
           <ul className="list">
             {s.tasks.map((t) => (
@@ -244,70 +203,73 @@ export default function App() {
     );
   };
 
-  const ToastIcon = toast?.tone === "ok" ? Check : toast?.tone === "info" ? Info : CircleAlert;
-
   return (
     <div className="app">
-      <header className="hero">
-        <div className="hero__top">
-          <span className="brand">
-            <span className="brand__mark" aria-hidden>
-              <HeartHandshake size={20} />
-            </span>
-            CareCircle
-          </span>
-          <button
-            className="me"
-            onClick={() => {
-              localStorage.removeItem(MEMBER_KEY);
-              setMember(null);
-            }}
-            aria-label={`You are ${member.name}. Switch person`}
-          >
-            <span className="avatar" aria-hidden>{member.name[0]}</span>
-            {member.name} · Switch
-          </button>
+      <header className="masthead">
+        <span className="wordmark">
+          Care<b>Circle</b>
+        </span>
+        <button
+          className="me"
+          onClick={() => {
+            localStorage.removeItem(MEMBER_KEY);
+            setMember(null);
+          }}
+          aria-label={`You are ${member.name}. Switch person`}
+        >
+          <span className="initial" aria-hidden>{member.name[0]}</span>
+          {member.name} <small>· switch</small>
+        </button>
+      </header>
+
+      <section className="day" aria-label="Summary">
+        <span className="label">{fmtDay(today.date)}</span>
+        <h1 className="day__title display">{recipient.display_name}'s day</h1>
+        <p className="day__lede">
+          {greeting(tz)}, {member.name}.{" "}
+          {total === 0 ? (
+            "Nothing is planned for today."
+          ) : allDone ? (
+            <strong>Everything is done.</strong>
+          ) : (
+            <>
+              <strong className="num">
+                {today.done.length} of {total}
+              </strong>{" "}
+              done
+              {today.overdue.length > 0 && (
+                <>
+                  , <strong className="is-late num">{today.overdue.length} need attention</strong>
+                </>
+              )}
+              .{next && <> Next: {next.title.split(" - ")[0]} at {fmtTime(next.due_at, tz)}.</>}
+            </>
+          )}
+        </p>
+
+        <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={today.done.length} aria-label="Done today">
+          <span style={{ width: `${total ? (today.done.length / total) * 100 : 0}%` }} />
         </div>
 
-        <div className="hero__body">
-          <div>
-            <p className="hero__greeting">
-              {greeting(tz)}, {member.name}
-            </p>
-            <h1 className="hero__title">{recipient.display_name}'s day</h1>
-            <p className="hero__date">
-              <CalendarDays size={16} /> {fmtDay(today.date)}
-            </p>
-          </div>
-          <ProgressRing done={today.done.length} total={total} />
-        </div>
-
-        <nav className="stats" aria-label="Summary">
-          <a href="#overdue" className={`stat stat--overdue ${today.overdue.length ? "is-hot" : ""}`}>
-            <strong>
-              <i className="stat__dot" /> {today.overdue.length}
-            </strong>
-            <span>Overdue</span>
+        <nav className="tally" aria-label="Jump to section">
+          <a href="#overdue" className={today.overdue.length ? "is-late" : "is-zero"}>
+            <strong>{today.overdue.length}</strong>
+            <span className="label">Overdue</span>
           </a>
-          <a href="#due" className="stat stat--due">
-            <strong>
-              <i className="stat__dot" /> {today.due.length}
-            </strong>
-            <span>To do</span>
+          <a href="#due" className={today.due.length ? "" : "is-zero"}>
+            <strong>{today.due.length}</strong>
+            <span className="label">To do</span>
           </a>
-          <a href="#done" className="stat stat--done">
-            <strong>
-              <i className="stat__dot" /> {today.done.length}
-            </strong>
-            <span>Done</span>
+          <a href="#done" className={today.done.length ? "" : "is-zero"}>
+            <strong>{today.done.length}</strong>
+            <span className="label">Done</span>
           </a>
         </nav>
-      </header>
+      </section>
 
       {offline && (
         <div className="banner" role="status">
-          <WifiOff size={18} />
-          Offline · showing the list from {lastSync ? fmtTime(new Date(lastSync).toISOString(), tz) : "earlier"}
+          Offline. Showing the list from {lastSync ? fmtTime(new Date(lastSync).toISOString(), tz) : "earlier"}.
         </div>
       )}
 
@@ -322,12 +284,9 @@ export default function App() {
 
       {toast && (
         <div className={`toast toast--${toast.tone}`} role="status" aria-live="polite">
-          <span className="toast__icon" aria-hidden>
-            <ToastIcon size={18} strokeWidth={2.8} />
-          </span>
           <span className="toast__text">{toast.text}</span>
           {toast.undo && (
-            <button className="btn toast__undo" onClick={toast.undo}>
+            <button className="btn" onClick={toast.undo}>
               Undo
             </button>
           )}

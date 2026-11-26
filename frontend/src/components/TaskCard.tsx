@@ -1,7 +1,12 @@
-import { Check, CircleAlert, Clock, Repeat, Undo2 } from "lucide-react";
-import type { Task } from "../types";
-import { fmtDay, fmtTime, localDate, relative } from "../time";
-import { CategoryIcon } from "./CategoryIcon";
+import type { Category, Task } from "../types";
+import { fmtDay, fmtTime, localDate, relative, timeParts } from "../time";
+
+export const CATEGORY_LABEL: Record<Category, string> = {
+  medicine: "Medicine",
+  appointment: "Appointment",
+  call: "Call",
+  other: "Other",
+};
 
 interface Props {
   task: Task;
@@ -16,65 +21,47 @@ interface Props {
 
 export function TaskCard({ task, tone, timeZone, today, now, busy, onDone, onUndo }: Props) {
   const dueDay = localDate(task.due_at, timeZone);
-  const fromAnotherDay = dueDay !== today;
-  const rel = relative(task.due_at, now);
 
   if (tone === "done") {
-    const who = task.completed_by?.name ?? "Someone";
     return (
       <li className="task task--done">
-        <span className="cat" aria-hidden>
-          <Check size={22} strokeWidth={3} />
-        </span>
-        <div className="task__main">
-          <div className="task__title">
-            {fmtTime(task.due_at, timeZone)} · {task.title}
-          </div>
-          <div className="who">
-            <span className="avatar" aria-hidden>{who[0]}</span>
-            <span>
-              <strong>{who}</strong>
-              {task.completed_at && <> at {fmtTime(task.completed_at, timeZone)}</>}
-            </span>
-          </div>
+        <div>
+          <p className="task__title">
+            <span className="num">{fmtTime(task.due_at, timeZone)}</span>
+            {task.title}
+          </p>
+          <p className="task__who">
+            Done by <strong>{task.completed_by?.name ?? "someone"}</strong>
+            {task.completed_at && <span className="num"> at {fmtTime(task.completed_at, timeZone)}</span>}
+          </p>
         </div>
-        <button className="btn btn--ghost undo-btn" onClick={() => onUndo(task)} disabled={busy} aria-label={`Undo ${task.title}`}>
-          <Undo2 size={18} /> Undo
+        <button className="btn btn--quiet btn--undo" onClick={() => onUndo(task)} disabled={busy} aria-label={`Undo ${task.title}`}>
+          Undo
         </button>
       </li>
     );
   }
 
+  const { clock, period } = timeParts(task.due_at, timeZone);
+  const rel = relative(task.due_at, now);
+  const statusTone = tone === "overdue" ? "overdue" : rel === "due now" ? "now" : "due";
+  const kicker = [CATEGORY_LABEL[task.category], task.repeats_daily ? "Daily" : null].filter(Boolean).join(" · ");
+
   return (
-    <li className={`task task--${tone}`}>
-      <div className="task__main">
-        <div className="task__top">
-          <CategoryIcon category={task.category} size={18} />
-          <span className="task__time">{fmtTime(task.due_at, timeZone)}</span>
-          {fromAnotherDay && <span className="task__day">{fmtDay(dueDay, true)}</span>}
-          <span className={`badge badge--${tone === "overdue" ? "overdue" : rel === "due now" ? "now" : "due"}`}>
-            {tone === "overdue" ? <CircleAlert size={14} strokeWidth={2.6} /> : <Clock size={14} strokeWidth={2.6} />}
-            {rel}
-          </span>
+    <li className={`task task--${tone} cat-${task.category}`}>
+      <div>
+        <span className="label kicker">{kicker}</span>
+        <div className="task__when">
+          <span className="task__clock">{clock}</span>
+          <span className="task__period">{period}</span>
+          {dueDay !== today && <span className="task__day">{fmtDay(dueDay, true)}</span>}
         </div>
-        <div className="task__title">{task.title}</div>
-        {task.notes && <div className="task__notes">{task.notes}</div>}
-        {task.repeats_daily && (
-          <div className="task__sub">
-            <span>
-              <Repeat size={14} strokeWidth={2.4} /> Every day
-            </span>
-          </div>
-        )}
+        <p className="task__title">{task.title}</p>
+        {task.notes && <p className="task__notes">{task.notes}</p>}
+        <p className={`task__status task__status--${statusTone}`}>{rel === "due now" ? "Due now" : rel}</p>
       </div>
-      <button
-        className={`btn done-btn ${tone === "overdue" ? "done-btn--urgent" : ""}`}
-        onClick={() => onDone(task)}
-        disabled={busy}
-        aria-label={`Mark ${task.title} done`}
-      >
-        <Check size={22} strokeWidth={3} />
-        Done
+      <button className="btn btn--done" onClick={() => onDone(task)} disabled={busy} aria-label={`Mark ${task.title} done`}>
+        {busy ? "…" : "Done"}
       </button>
     </li>
   );

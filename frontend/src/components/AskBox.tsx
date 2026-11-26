@@ -1,4 +1,3 @@
-import { ArrowUp, Mic, MicOff, Sparkles, ThumbsDown, ThumbsUp, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, ask } from "../api";
 
@@ -101,18 +100,12 @@ export function AskBox({ memberId, recipientName }: Props) {
   }
 
   return (
-    <section className="panel ask" aria-labelledby="ask-title">
-      <div className="panel__head">
-        <div>
-          <h2 id="ask-title" className="panel__title">
-            <span className="panel__icon" aria-hidden>
-              <Sparkles size={20} strokeWidth={2.4} />
-            </span>
-            Ask about today
-          </h2>
-          <p className="panel__sub">Answers come only from today's list.</p>
-        </div>
-      </div>
+    <section className="panel" aria-labelledby="ask-title">
+      <span className="label">Assistant</span>
+      <h2 id="ask-title" className="panel__title display">
+        Ask about today
+      </h2>
+      <p className="panel__sub">Answers come only from today's list, never from guesswork.</p>
 
       <form
         className="ask__bar"
@@ -122,84 +115,70 @@ export function AskBox({ memberId, recipientName }: Props) {
         }}
       >
         <input
+          className="input"
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          placeholder={listening ? "Listening…" : `Did ${recipientName} take the 8 pm tablet?`}
+          placeholder={listening ? "Listening…" : `e.g. Did ${recipientName} take the 8 pm tablet?`}
           aria-label="Your question"
           enterKeyHint="send"
         />
         {SpeechRecognitionImpl && (
           <button
             type="button"
-            className={`btn round-btn round-btn--mic ${listening ? "round-btn--live" : ""}`}
+            className={`btn btn--quiet ${listening ? "btn--live" : ""}`}
             onClick={toggleVoice}
-            aria-label={listening ? "Stop listening" : "Ask by voice"}
             aria-pressed={listening}
           >
-            {listening ? <MicOff size={20} /> : <Mic size={20} />}
+            {listening ? "Stop" : "Speak"}
           </button>
         )}
-        <button
-          className="btn btn--primary round-btn"
-          disabled={state === "streaming" || !question.trim()}
-          aria-label="Ask"
-        >
-          <ArrowUp size={22} strokeWidth={2.6} />
+        <button className="btn btn--primary" disabled={state === "streaming" || !question.trim()}>
+          Ask
         </button>
       </form>
 
       {state === "idle" ? (
-        <div className="chips">
+        <div className="prompts">
           {suggestions.map((s) => (
-            <button key={s} type="button" className="chip" onClick={() => void submit(s)}>
+            <button key={s} type="button" className="prompt" onClick={() => void submit(s)}>
               {s}
             </button>
           ))}
         </div>
       ) : (
-        <div className={`answer answer--${state}`}>
-          <span className="answer__avatar" aria-hidden>
-            <Sparkles size={18} />
-          </span>
-          <div>
-            <p className="answer__q">“{asked}”</p>
-            <div className="answer__bubble" aria-live="polite" aria-busy={state === "streaming"}>
-              {answer ? (
-                <>
-                  {answer}
-                  {state === "streaming" && <span className="caret" aria-hidden />}
-                </>
-              ) : (
-                <span className="typing" aria-label="Thinking">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-              )}
-            </div>
-            {state === "done" && (
-              <div className="answer__foot">
-                <span>
-                  <Zap size={14} /> {latency != null ? `${(latency / 1000).toFixed(1)} s` : ""}
-                </span>
-                <span className="rate">
-                  {feedback == null ? (
-                    <>
-                      <button className="btn btn--ghost" onClick={() => void rate(true)} aria-label="Helpful">
-                        <ThumbsUp size={17} />
-                      </button>
-                      <button className="btn btn--ghost" onClick={() => void rate(false)} aria-label="Not helpful">
-                        <ThumbsDown size={17} />
-                      </button>
-                    </>
-                  ) : (
-                    <span>Thanks for the feedback</span>
-                  )}
-                </span>
-              </div>
+        <figure className={`answer answer--${state}`}>
+          <blockquote className="answer__q">“{asked}”</blockquote>
+          <p className="answer__text" aria-live="polite" aria-busy={state === "streaming"}>
+            {answer ? (
+              <>
+                {answer}
+                {state === "streaming" && <span className="caret" aria-hidden />}
+              </>
+            ) : (
+              <span className="thinking">Reading today's list</span>
             )}
-          </div>
-        </div>
+          </p>
+          {state === "done" && (
+            <figcaption className="answer__foot">
+              <span className="label num">{latency != null && `Answered in ${(latency / 1000).toFixed(1)} s`}</span>
+              <span className="rate">
+                {feedback == null ? (
+                  <>
+                    Helpful?
+                    <button className="btn btn--text" onClick={() => void rate(true)}>
+                      Yes
+                    </button>
+                    <button className="btn btn--text" onClick={() => void rate(false)}>
+                      No
+                    </button>
+                  </>
+                ) : (
+                  "Thanks for the feedback"
+                )}
+              </span>
+            </figcaption>
+          )}
+        </figure>
       )}
     </section>
   );

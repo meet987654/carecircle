@@ -6,6 +6,12 @@ export function fmtTime(iso: string, timeZone: string): string {
     .replace(/\s?([ap])\.?m\.?/i, (_, p: string) => ` ${p.toLowerCase()}m`);
 }
 
+/** "8:00 pm" -> { clock: "8:00", period: "pm" } so the two can be set in different type. */
+export function timeParts(iso: string, timeZone: string): { clock: string; period: string } {
+  const [clock, period = ""] = fmtTime(iso, timeZone).split(" ");
+  return { clock, period };
+}
+
 export function fmtDay(isoDate: string, short = false): string {
   // isoDate is a plain calendar date ("2026-11-26"); format it without timezone shifts.
   const [y, m, d] = isoDate.split("-").map(Number);

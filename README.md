@@ -56,7 +56,7 @@ before sending anything, the answer falls back to the template, and the log reco
 - **Two people tapping Done at once:** handled at the database level (see below), with a friendly
   "Priya already did this at 8:04 pm" in the UI, plus a test that fires 8 simultaneous taps.
 - **Who did what:** a "who's using this phone?" picker instead of a full login (see assumptions).
-- **Voice input:** a mic button on the Ask box (Web Speech API; hidden on browsers without it).
+- **Voice input:** a Speak button on the Ask box (Web Speech API; hidden on browsers without it).
 
 ## Design choices and why
 
