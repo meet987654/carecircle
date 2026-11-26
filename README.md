@@ -150,7 +150,9 @@ session, never from the request body. All standard library, no new dependencies.
 
 **UI for a tired caregiver on a phone:** calm and familiar on purpose. One typeface (Inter), neutral greys, and
 colour only where it means something (red = late, green = done). Each section is a grouped list with a check
-circle, title and right-aligned time (the iOS Reminders / Things pattern). 17px text, 44px+ tap targets, and every
+circle, title and right-aligned time (the iOS Reminders / Things pattern). It has Apple-style touches: a translucent sticky bar, a bottom sheet for
+adding tasks, spring animations, and a Siri-style full-screen voice mode (edge glow, and an orb that follows the
+microphone, swirls while thinking and breathes while speaking). 17px text, 44px+ tap targets, and every
 state shown in both colour and words ("2 h 10 min late", "Done by Ravi at 9:07 am"). Overdue comes first and only appears
 when non-empty. No menus or modals: the add form opens inline, and who you are (with sign out) is always visible.
 Done is **optimistic** with a 7-second **Undo**, because mis-taps happen at 6 am. The list refreshes every 30 s
