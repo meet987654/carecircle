@@ -37,8 +37,10 @@ export function TaskCard({ task, tone, timeZone, today, now, busy, onDone, onUnd
         {task.notes && <div className="card__notes">{task.notes}</div>}
         {tone === "done" ? (
           <div className="card__meta">
-            Done by <strong>{task.completed_by?.name ?? "someone"}</strong>
-            {task.completed_at && <> at {fmtTime(task.completed_at, timeZone)}</>}
+            <span>
+              Done by <strong>{task.completed_by?.name ?? "someone"}</strong>
+              {task.completed_at && <> at {fmtTime(task.completed_at, timeZone)}</>}
+            </span>
           </div>
         ) : (
           <div className={`card__meta card__meta--${tone}`}>
