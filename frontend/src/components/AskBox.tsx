@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { api, ask } from "../api";
 
 interface Props {
-  memberId: number | null;
   recipientName: string;
 }
 
@@ -21,7 +20,7 @@ const SpeechRecognitionImpl: (new () => SpeechRecognitionLike) | undefined =
 
 type State = "idle" | "streaming" | "done" | "error";
 
-export function AskBox({ memberId, recipientName }: Props) {
+export function AskBox({ recipientName }: Props) {
   const [question, setQuestion] = useState("");
   const [asked, setAsked] = useState("");
   const [answer, setAnswer] = useState("");
@@ -53,7 +52,6 @@ export function AskBox({ memberId, recipientName }: Props) {
     try {
       await ask(
         text,
-        memberId,
         {
           onMeta: (m) => setInteractionId(m.interaction_id),
           onToken: (t) => setAnswer((a) => a + t),

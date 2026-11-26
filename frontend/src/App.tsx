@@ -2,13 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "./api";
 import { AddTask } from "./components/AddTask";
 import { AskBox } from "./components/AskBox";
-import { MemberPicker } from "./components/MemberPicker";
+import { Login } from "./components/Login";
 import { TaskCard } from "./components/TaskCard";
 import { fmtDay, fmtTime } from "./time";
 import type { Member, NewTask, Recipient, Task, Today } from "./types";
 
 const REFRESH_MS = 30_000; // pick up what other family members did
-const MEMBER_KEY = "carecircle.memberId";
 
 interface Toast {
   text: string;
@@ -24,7 +23,8 @@ function greeting(timeZone: string): string {
 export default function App() {
   const [recipient, setRecipient] = useState<Recipient | null>(null);
   const [today, setToday] = useState<Today | null>(null);
-  const [member, setMember] = useState<Member | null>(null);
+  // undefined = still checking the session, null = signed out.
+  const [member, setMember] = useState<Member | null | undefined>(undefined);
   const [busy, setBusy] = useState<Set<number>>(new Set());
   const [toast, setToast] = useState<Toast | null>(null);
   const [offline, setOffline] = useState(false);
@@ -38,31 +38,49 @@ export default function App() {
     toastTimer.current = window.setTimeout(() => setToast(null), t.undo ? 7000 : 4000);
   }, []);
 
+  const signedOut = useCallback(() => {
+    setMember(null);
+    setRecipient(null);
+    setToday(null);
+  }, []);
+
   const refresh = useCallback(async () => {
     try {
       setToday(await api.today());
       setOffline(false);
       setLastSync(Date.now());
-    } catch {
-      setOffline(true);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) signedOut(); // session expired
+      else setOffline(true);
     }
-  }, []);
+  }, [signedOut]);
 
-  // Initial load + remember who is using this phone.
+  // Is there a session already (the cookie is httpOnly, so ask the server)?
   useEffect(() => {
     api
+      .me()
+      .then(setMember)
+      .catch((err) => (err instanceof ApiError && err.status === 401 ? setMember(null) : setOffline(true)));
+  }, []);
+
+  // Once signed in, load the family and today's list.
+  useEffect(() => {
+    if (!member) return;
+    api
       .recipient()
-      .then((r) => {
-        setRecipient(r);
-        const saved = Number(localStorage.getItem(MEMBER_KEY));
-        setMember(r.members.find((m) => m.id === saved) ?? null);
-      })
+      .then(setRecipient)
       .catch(() => setOffline(true));
     void refresh();
-  }, [refresh]);
+  }, [member?.id, refresh]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function signOut() {
+    await api.logout().catch(() => undefined);
+    signedOut();
+  }
 
   // Keep the list fresh: poll, refresh when the phone wakes up, tick relative times.
   useEffect(() => {
+    if (!member) return;
     const poll = window.setInterval(() => void refresh(), REFRESH_MS);
     const tick = window.setInterval(() => setNow(Date.now()), 30_000);
     const onVisible = () => document.visibilityState === "visible" && void refresh();
@@ -72,7 +90,7 @@ export default function App() {
       window.clearInterval(tick);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [refresh]);
+  }, [member, refresh]);
 
   const setTaskBusy = (id: number, on: boolean) =>
     setBusy((prev) => {
@@ -93,7 +111,7 @@ export default function App() {
       done: [optimistic, ...today.done],
     });
     try {
-      await api.complete(task.id, member.id);
+      await api.complete(task.id);
       showToast({ text: `Done: ${task.title}`, tone: "ok", undo: () => void undo(task) });
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
@@ -125,12 +143,14 @@ export default function App() {
   }
 
   async function createTask(task: NewTask) {
-    await api.createTask({ ...task, created_by_id: member?.id });
+    await api.createTask(task);
     showToast({ text: `Added: ${task.title}`, tone: "ok" });
     await refresh();
   }
 
-  if (!recipient || !today) {
+  if (member === null) return <Login onLogin={setMember} />;
+
+  if (!member || !recipient || !today) {
     return (
       <main className="loading">
         <span className="wordmark">
@@ -138,19 +158,6 @@ export default function App() {
         </span>
         <p>{offline ? "Can't reach the server. Is it running?" : "Loading today…"}</p>
       </main>
-    );
-  }
-
-  if (!member) {
-    return (
-      <MemberPicker
-        members={recipient.members}
-        recipientName={recipient.display_name}
-        onPick={(m) => {
-          localStorage.setItem(MEMBER_KEY, String(m.id));
-          setMember(m);
-        }}
-      />
     );
   }
 
@@ -209,16 +216,9 @@ export default function App() {
         <span className="wordmark">
           Care<b>Circle</b>
         </span>
-        <button
-          className="me"
-          onClick={() => {
-            localStorage.removeItem(MEMBER_KEY);
-            setMember(null);
-          }}
-          aria-label={`You are ${member.name}. Switch person`}
-        >
+        <button className="me" onClick={() => void signOut()} aria-label={`Signed in as ${member.name}. Sign out`}>
           <span className="initial" aria-hidden>{member.name[0]}</span>
-          {member.name} <small>· switch</small>
+          {member.name} <small>· sign out</small>
         </button>
       </header>
 
@@ -278,7 +278,7 @@ export default function App() {
         {today.overdue.length > 0 && renderSection("overdue")}
         {renderSection("due")}
         <AddTask today={today.date} timeZone={tz} recipientName={recipient.display_name} onCreate={createTask} />
-        <AskBox memberId={member.id} recipientName={recipient.display_name} />
+        <AskBox recipientName={recipient.display_name} />
         {renderSection("done")}
       </main>
 

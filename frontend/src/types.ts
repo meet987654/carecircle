@@ -41,5 +41,4 @@ export interface NewTask {
   due_at: string; // naive "YYYY-MM-DDTHH:MM", read in the recipient's timezone
   repeats_daily: boolean;
   notes?: string;
-  created_by_id?: number;
 }

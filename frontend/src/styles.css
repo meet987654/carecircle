@@ -360,6 +360,12 @@ h1, h2, h3, p, figure, blockquote { margin: 0; }
 .member:hover::after { transform: translateX(4px); color: var(--accent); }
 .member:nth-child(3n+2) .initial { background: var(--cat-call); }
 .member:nth-child(3n+3) .initial { background: var(--cat-other); }
+.login { margin-top: var(--s-8); }
+.login__submit { width: 100%; }
+.demo { margin-top: var(--s-10); }
+.demo .picker__list { margin-top: var(--s-3); }
+.demo .member { min-height: 72px; }
+.member:disabled { opacity: 0.6; cursor: progress; }
 .picker__foot { margin-top: var(--s-6); font-size: var(--fs-sm) !important; color: var(--ink-3) !important; }
 
 /* ==========================================================================

@@ -1,4 +1,4 @@
-import type { NewTask, Recipient, Task, Today } from "./types";
+import type { Member, NewTask, Recipient, Task, Today } from "./types";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public body: unknown) {
@@ -23,11 +23,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 const post = (body: unknown) => ({ method: "POST", body: JSON.stringify(body) });
 
 export const api = {
+  // Session is an httpOnly cookie set by the server; fetch sends it on same-origin requests.
+  login: (email: string, password: string) =>
+    request<{ member: Member; token: string }>("/api/auth/login", post({ email, password })),
+  logout: () => request<void>("/api/auth/logout", post({})),
+  me: () => request<Member>("/api/auth/me"),
   recipient: () => request<Recipient>("/api/recipient"),
   today: () => request<Today>("/api/today"),
   createTask: (task: NewTask) => request<Task>("/api/tasks", post(task)),
-  complete: (id: number, memberId: number) =>
-    request<Task>(`/api/tasks/${id}/complete`, post({ member_id: memberId })),
+  // Who did it comes from the session, not from the request.
+  complete: (id: number) => request<Task>(`/api/tasks/${id}/complete`, post({})),
   reopen: (id: number) => request<Task>(`/api/tasks/${id}/reopen`, post({})),
   deleteTask: (id: number) => request<void>(`/api/tasks/${id}`, { method: "DELETE" }),
   feedback: (interactionId: number, helpful: boolean) =>
@@ -48,12 +53,11 @@ export interface AskHandlers {
  */
 export async function ask(
   question: string,
-  memberId: number | null,
   handlers: AskHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
   const res = await fetch("/api/assistant/ask", {
-    ...post({ question, member_id: memberId }),
+    ...post({ question }),
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
     signal,
   });
