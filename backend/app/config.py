@@ -1,0 +1,29 @@
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    database_url: str = "postgresql+psycopg://carecircle:carecircle@localhost:5432/carecircle"
+
+    # A task due at 08:00 shows as "due" until 08:00 + grace, then "overdue".
+    # Stops the list turning red the minute something is due.
+    overdue_grace_minutes: int = 15
+
+    # Assistant: "template" (default, no network, deterministic) or "openai_compatible"
+    # (Groq, Ollama, OpenAI... anything speaking /v1/chat/completions).
+    assistant_provider: str = "template"
+    llm_base_url: str = "https://api.groq.com/openai/v1"
+    llm_api_key: str = ""
+    llm_model: str = "llama-3.1-8b-instant"
+    llm_timeout_seconds: float = 20.0
+
+    seed_demo_data: bool = True
+    cors_origins: str = "http://localhost:5173,http://localhost:3000"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

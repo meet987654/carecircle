@@ -1,0 +1,65 @@
+"""The template assistant answers only from the day's facts."""
+
+import asyncio
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+from app.models import CareRecipient, CareTask, FamilyMember, TaskCategory, TaskStatus
+from app.services.assistant import TemplateProvider, build_context, compose_answer, fmt_time
+from app.services.today import group_today
+
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def at(hh, mm=0):
+    return datetime(2026, 11, 26, hh, mm, tzinfo=IST)
+
+
+def make_context(now=at(21, 0)):
+    mum = CareRecipient(name="Kamala", display_name="Mum", timezone="Asia/Kolkata")
+    ravi = FamilyMember(name="Ravi")
+    tasks = [
+        CareTask(title="BP tablet", category=TaskCategory.medicine, due_at=at(9),
+                 status=TaskStatus.done, completed_at=at(9, 5), completed_by=ravi),
+        CareTask(title="BP tablet", category=TaskCategory.medicine, due_at=at(20),
+                 status=TaskStatus.pending),
+        CareTask(title="Call with Dr. Mehta", category=TaskCategory.call, due_at=at(22),
+                 status=TaskStatus.pending),
+    ]
+    return build_context(mum, group_today(tasks, now, IST, timedelta(minutes=15)), now)
+
+
+def test_fmt_time():
+    assert fmt_time(at(8), IST) == "8 am"
+    assert fmt_time(at(20, 30), IST) == "8:30 pm"
+    assert fmt_time(at(0, 5), IST) == "12:05 am"
+
+
+def test_answer_names_pending_dose_and_who_did_the_earlier_one():
+    answer = compose_answer("Did Mum get her BP tablet?", make_context())
+    assert "8 pm BP tablet" in answer and "1 h late" in answer
+    assert "Ravi did the 9 am BP tablet (at 9:05 am)" in answer
+    assert "Call" not in answer  # filtered to the medicine topic
+
+
+def test_remaining_question_skips_done_items():
+    answer = compose_answer("What's left?", make_context())
+    assert "Ravi" not in answer
+    assert "Next up is the 10 pm Call with Dr. Mehta" in answer
+
+
+def test_empty_day():
+    ctx = make_context()
+    ctx.update(overdue=[], due=[], done=[])
+    assert compose_answer("anything?", ctx) == "There is nothing on Mum's list for today."
+
+
+def test_template_stream_reassembles_to_full_answer():
+    ctx = make_context()
+
+    async def collect():
+        return [c async for c in TemplateProvider(chunk_delay=0).stream("status?", ctx)]
+
+    chunks = asyncio.run(collect())
+    assert len(chunks) > 3
+    assert "".join(chunks) == compose_answer("status?", ctx)
