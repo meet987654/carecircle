@@ -119,7 +119,9 @@ conversation is saved in the logged context, so a follow-up's answer can be unde
   grounding and one fallback, and the log records `channel=voice` and `stt_ms`.
 - **Speaking:** the streamed answer is cut into sentences and each one is spoken as soon as it is complete, so
   speech starts before the answer has finished. With `TTS_PROVIDER=deepgram`, each sentence is turned into
-  speech by **Deepgram Aura** (`POST /api/voice/speak`, MP3, about 0.3 s, free credit). Each sentence's audio
+  speech by **Deepgram Aura** (`POST /api/voice/speak`, MP3, about 0.4 s, free credit). It uses one
+  long-lived connection, opened when you tap Talk, because a fresh TLS handshake to Deepgram costs more than
+  generating the sentence. Each sentence's audio
   is requested the moment the sentence is complete, so it's usually ready before the previous one ends. With
   no key, or if a request fails, the browser's own voice speaks instead.
   *(I also tried Kokoro, an open-source model running locally: no key needed, but about 2.5 s per sentence on
